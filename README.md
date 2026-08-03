@@ -1,11 +1,38 @@
-<div align="center">
+# เกมส์คณิตศาสตร์ 24 อัจฉริยะ (Math 24 Challenge)
 
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
+ยินดีต้อนรับสู่เกม **Math 24 Challenge** แอพพลิเคชั่นเกมคณิตศาสตร์ที่เน้นความเร็วและความแม่นยำในการคิดเลข โดยใช้ตัวเลข 1-9 จำนวน 4 ตัว มาคำนวณผ่านเครื่องหมายทางคณิตศาสตร์พื้นฐาน (+, −, ×, ÷) ให้ได้ผลลัพธ์เท่ากับ 24
 
-  <h1>Built with AI Studio</h2>
+## คุณสมบัติเด่น
+- **ระบบการเล่นที่ทันสมัย**: ออกแบบ UI ให้ใช้งานง่ายบนมือถือ (Mobile-First) พร้อมแอนิเมชั่นที่ลื่นไหล
+- **โหมดการเล่นหลากหลาย**: 
+  - **โหมดคลาสสิก/จับเวลา**: ฝึกฝนทักษะการคิดเลขเร็ว
+  - **โหมดกำหนดโจทย์เอง**: ตั้งโจทย์ที่ต้องการเพื่อหาคำตอบ
+  - **โหมดแข่งกับเพื่อน**: เล่นแข่งกับเพื่อนแบบเรียลไทม์ผ่านระบบ Socket.io
+- **ระบบจัดอันดับ (Leaderboard)**: บันทึกคะแนนและเวลาที่ทำได้ดีที่สุดลงใน Firebase
+- **ระบบความปลอดภัย**: เชื่อมต่อผ่าน Google Authentication เพื่อความปลอดภัยของข้อมูลสมาชิก
 
-  <p>The fastest path from prompt to production with Gemini.</p>
+## วิธีการใช้งาน
+1. **เข้าสู่ระบบ**: ใช้บัญชี Google เพื่อเข้าใช้งาน
+2. **เลือกโหมดการเล่น**: 
+   - กดปุ่ม **"เล่นคนเดียว"** เพื่อเริ่มฝึกฝน
+   - กดปุ่ม **"แข่งกับเพื่อน"** เพื่อสร้างหรือเข้าร่วมห้องเล่น
+3. **วิธีการเล่น**:
+   - เลือกตัวเลขตัวแรก
+   - เลือกเครื่องหมายที่ต้องการ (+, −, ×, ÷)
+   - เลือกตัวเลขตัวที่สอง
+   - ทำซ้ำจนกว่าจะเหลือตัวเลขเพียงตัวเดียวที่มีค่าเท่ากับ 24
 
-  <a href="https://aistudio.google.com/apps">Start building</a>
+## เทคโนโลยีที่ใช้
+- **Frontend**: React 19, Tailwind CSS 4, Framer Motion
+- **Backend**: Node.js (Express), Socket.io (Real-time Multiplayer)
+- **Database**: Firebase Firestore & Firebase Authentication
+- **Build Tool**: Vite
 
-</div>
+## การติดตั้งและการพัฒนา
+1. ติดตั้ง Dependencies: `npm install`
+2. เริ่มต้นระบบ Development: `npm run dev`
+3. สร้าง Production Build: `npm run build`
+4. เริ่มต้นระบบ Production: `npm run start`
+
+---
+สร้างสรรค์โดย Google AI Studio

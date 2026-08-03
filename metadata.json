@@ -1,0 +1,6 @@
+{
+  "name": "Math 24 Challenge",
+  "description": "เกมส์คณิตศาสตร์ 24 อัจฉริยะ ท้าทายทักษะการคำนวณ พร้อมโหมดจัดอันดับและเล่นแข่งกับเพื่อนแบบเรียลไทม์",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

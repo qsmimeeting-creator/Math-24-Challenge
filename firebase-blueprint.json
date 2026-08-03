@@ -1,0 +1,42 @@
+{
+  "collections": {
+    "users": {
+      "description": "User profiles and settings",
+      "documents": {
+        "{userId}": {
+          "username": "string",
+          "avatar": "string",
+          "bestScore": "number",
+          "bestTime": "number",
+          "createdAt": "timestamp"
+        }
+      }
+    },
+    "leaderboard": {
+      "description": "Historical high scores for global ranking",
+      "documents": {
+        "{scoreId}": {
+          "userId": "string",
+          "username": "string",
+          "score": "number",
+          "time": "number",
+          "mode": "string",
+          "timestamp": "timestamp"
+        }
+      }
+    },
+    "rooms": {
+      "description": "Active multiplayer game rooms",
+      "documents": {
+        "{roomId}": {
+          "hostId": "string",
+          "players": "array",
+          "status": "string",
+          "currentPuzzle": "object",
+          "results": "map",
+          "createdAt": "timestamp"
+        }
+      }
+    }
+  }
+}
