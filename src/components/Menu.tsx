@@ -5,7 +5,7 @@
 
 import { UserProfile } from '../types';
 import { motion } from 'motion/react';
-import { Play, Trophy, Users, LogOut, Settings, Hash } from 'lucide-react';
+import { Play, Trophy, Users, LogOut, Settings, Hash, ShieldAlert } from 'lucide-react';
 import { auth } from '../lib/firebase';
 
 interface Props {
@@ -17,7 +17,7 @@ interface Props {
 export default function Menu({ setView, profile, onLogout }: Props) {
   return (
     <div className="flex-1 flex flex-col p-6">
-      <header className="flex items-center justify-between mb-12 bg-white p-4 rounded-2xl border-4 border-slate-900 shadow-[4px_4px_0px_0px_rgba(15,23,42,1)]">
+      <header className="flex items-center justify-between mb-8 bg-white p-4 rounded-2xl border-4 border-slate-900 shadow-[4px_4px_0px_0px_rgba(15,23,42,1)]">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 bg-indigo-600 text-white rounded-xl flex items-center justify-center font-black border-2 border-slate-900">24</div>
           <div>
@@ -25,19 +25,28 @@ export default function Menu({ setView, profile, onLogout }: Props) {
             <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{profile?.username}</p>
           </div>
         </div>
-        <button 
-          onClick={() => {
-            if (onLogout) {
-              onLogout();
-            } else {
-              auth.signOut();
-            }
-          }}
-          className="p-2 bg-rose-500 text-white rounded-xl border-2 border-slate-900 shadow-[2px_2px_0px_0px_rgba(15,23,42,1)] active:shadow-none active:translate-x-[1px] active:translate-y-[1px]"
-          title="Change Name / Exit"
-        >
-          <LogOut size={18} />
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setView('admin')}
+            className="p-2 bg-slate-900 text-yellow-400 rounded-xl border-2 border-slate-900 shadow-[2px_2px_0px_0px_rgba(15,23,42,1)] active:shadow-none active:translate-x-[1px] active:translate-y-[1px]"
+            title="Admin Management"
+          >
+            <ShieldAlert size={18} />
+          </button>
+          <button 
+            onClick={() => {
+              if (onLogout) {
+                onLogout();
+              } else {
+                auth.signOut();
+              }
+            }}
+            className="p-2 bg-rose-500 text-white rounded-xl border-2 border-slate-900 shadow-[2px_2px_0px_0px_rgba(15,23,42,1)] active:shadow-none active:translate-x-[1px] active:translate-y-[1px]"
+            title="Change Name / Exit"
+          >
+            <LogOut size={18} />
+          </button>
+        </div>
       </header>
 
       <div className="space-y-5">
