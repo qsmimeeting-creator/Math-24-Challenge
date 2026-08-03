@@ -7,6 +7,7 @@ import { UserProfile } from '../types';
 import { motion } from 'motion/react';
 import { Play, Trophy, Users, LogOut, Settings, Hash, ShieldAlert } from 'lucide-react';
 import { auth } from '../lib/firebase';
+import AppLogo from './AppLogo';
 
 interface Props {
   setView: (view: any) => void;
@@ -19,19 +20,26 @@ export default function Menu({ setView, profile, onLogout }: Props) {
     <div className="flex-1 flex flex-col p-6">
       <header className="flex items-center justify-between mb-8 bg-white p-4 rounded-2xl border-4 border-slate-900 shadow-[4px_4px_0px_0px_rgba(15,23,42,1)]">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-indigo-600 text-white rounded-xl flex items-center justify-center font-black border-2 border-slate-900">24</div>
+          <AppLogo 
+            size="sm" 
+            onClick={() => setView('admin')} 
+            title="คลิกไอคอนนี้เพื่อเข้าหน้า Admin" 
+          />
           <div>
-            <h1 className="font-black text-slate-900 text-lg italic uppercase leading-none">MATH24</h1>
+            <div className="flex items-center gap-1.5">
+              <h1 className="font-black text-slate-900 text-lg italic uppercase leading-none">MATH24</h1>
+            </div>
             <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{profile?.username}</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
           <button
             onClick={() => setView('admin')}
-            className="p-2 bg-slate-900 text-yellow-400 rounded-xl border-2 border-slate-900 shadow-[2px_2px_0px_0px_rgba(15,23,42,1)] active:shadow-none active:translate-x-[1px] active:translate-y-[1px]"
-            title="Admin Management"
+            className="flex items-center gap-1 px-3 py-2 bg-slate-900 text-yellow-400 rounded-xl border-2 border-slate-900 shadow-[2px_2px_0px_0px_rgba(15,23,42,1)] active:shadow-none active:translate-x-[1px] active:translate-y-[1px] font-black text-xs uppercase"
+            title="เข้าสู่หน้า Admin"
           >
-            <ShieldAlert size={18} />
+            <ShieldAlert size={16} />
+            <span>ADMIN</span>
           </button>
           <button 
             onClick={() => {
@@ -42,7 +50,7 @@ export default function Menu({ setView, profile, onLogout }: Props) {
               }
             }}
             className="p-2 bg-rose-500 text-white rounded-xl border-2 border-slate-900 shadow-[2px_2px_0px_0px_rgba(15,23,42,1)] active:shadow-none active:translate-x-[1px] active:translate-y-[1px]"
-            title="Change Name / Exit"
+            title="ออกจากระบบ / เปลี่ยนชื่อ"
           >
             <LogOut size={18} />
           </button>

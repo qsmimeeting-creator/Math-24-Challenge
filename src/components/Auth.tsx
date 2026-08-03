@@ -10,6 +10,7 @@ import { motion } from 'motion/react';
 import { Play, AlertCircle } from 'lucide-react';
 import { useState, FormEvent } from 'react';
 import { UserProfile } from '../types';
+import AppLogo from './AppLogo';
 
 interface Props {
   onLogin?: (profile: UserProfile) => void;
@@ -140,8 +141,8 @@ export default function Auth({ onLogin }: Props) {
         animate={{ opacity: 1, scale: 1 }}
         className="w-full max-w-sm"
       >
-        <div className="w-24 h-24 bg-white border-4 border-slate-900 rounded-[32px] flex items-center justify-center text-5xl font-black mb-8 mx-auto shadow-[8px_8px_0px_0px_rgba(15,23,42,1)] text-indigo-600 italic">
-          24
+        <div className="flex justify-center mb-8">
+          <AppLogo size="lg" />
         </div>
         <h1 className="text-5xl font-black text-slate-900 mb-2 tracking-tighter italic uppercase leading-none">
           MATH<span className="text-rose-500">24</span>
