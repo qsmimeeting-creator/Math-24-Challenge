@@ -43,4 +43,6 @@ export interface Room {
   status: 'waiting' | 'playing' | 'finished';
   currentPuzzle: GamePuzzle | null;
   createdAt: number;
+  timeLimit?: number;
+  gameStartTime?: number;
 }

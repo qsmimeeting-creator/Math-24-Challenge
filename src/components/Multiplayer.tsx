@@ -5,11 +5,11 @@
 
 import { useState, useEffect } from 'react';
 import { db } from '../lib/firebase';
-import { doc, setDoc, getDoc, updateDoc, onSnapshot, collection, getDocs, query, where, limit } from 'firebase/firestore';
+import { doc, setDoc, getDoc, updateDoc, onSnapshot, collection, getDocs, query, limit } from 'firebase/firestore';
 import { UserProfile, Room, Player } from '../types';
 import { Math24Solver } from '../utils/math24';
 import { motion, AnimatePresence } from 'motion/react';
-import { ChevronLeft, Users, Play, Trophy, RefreshCw, CheckCircle, RotateCcw, Lightbulb } from 'lucide-react';
+import { ChevronLeft, Users, Play, Trophy, RefreshCw, CheckCircle, RotateCcw, Lightbulb, Clock, Crown, Medal, Award } from 'lucide-react';
 
 interface Props {
   setView: (view: any) => void;
@@ -30,6 +30,7 @@ export default function Multiplayer({ setView, profile }: Props) {
   const [activeRooms, setActiveRooms] = useState<{ id: string; count: number }[]>([]);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [selectedTimeLimit, setSelectedTimeLimit] = useState<number>(60);
 
   // In-game board state
   const [cards, setCards] = useState<Card[]>([]);
@@ -38,6 +39,8 @@ export default function Multiplayer({ setView, profile }: Props) {
   const [selectedOp, setSelectedOp] = useState<string | null>(null);
   const [gameMessage, setGameMessage] = useState('FIRST NUMBER');
   const [solvedNotice, setSolvedNotice] = useState<string | null>(null);
+  const [timeLeft, setTimeLeft] = useState<number>(60);
+  const [showHintModal, setShowHintModal] = useState(false);
 
   const username = profile?.username || 'PLAYER';
   const userId = profile?.uid || `guest_${Math.random().toString(36).substring(2, 8)}`;
@@ -100,6 +103,31 @@ export default function Multiplayer({ setView, profile }: Props) {
     return () => unsubscribe();
   }, [currentRoomId]);
 
+  // Countdown timer effect during 'playing' state
+  useEffect(() => {
+    if (room?.status !== 'playing' || !room.gameStartTime) return;
+
+    const limitSecs = room.timeLimit || 60;
+
+    const updateTimer = () => {
+      const elapsed = Math.floor((Date.now() - room.gameStartTime!) / 1000);
+      const remaining = Math.max(0, limitSecs - elapsed);
+      setTimeLeft(remaining);
+
+      if (remaining <= 0 && room.status === 'playing') {
+        // Mark room as finished
+        updateDoc(doc(db, 'rooms', currentRoomId!), {
+          status: 'finished'
+        }).catch(console.error);
+      }
+    };
+
+    updateTimer();
+    const timerInterval = setInterval(updateTimer, 500);
+
+    return () => clearInterval(timerInterval);
+  }, [room?.status, room?.gameStartTime, room?.timeLimit, currentRoomId]);
+
   const [copiedCode, setCopiedCode] = useState(false);
 
   const copyRoomCode = () => {
@@ -129,6 +157,7 @@ export default function Multiplayer({ setView, profile }: Props) {
         isFinished: false
       }],
       status: 'waiting',
+      timeLimit: selectedTimeLimit,
       currentPuzzle: {
         numbers: puzzle.numbers,
         solutions: puzzle.solutions
@@ -211,13 +240,43 @@ export default function Multiplayer({ setView, profile }: Props) {
     const allReady = hasMinPlayers && updatedPlayers.every(p => p.isReady);
     const newStatus = allReady ? 'playing' : 'waiting';
 
+    const updatePayload: Partial<Room> = {
+      players: updatedPlayers,
+      status: newStatus
+    };
+
+    if (allReady) {
+      updatePayload.gameStartTime = Date.now();
+    }
+
     try {
-      await updateDoc(doc(db, 'rooms', currentRoomId), {
-        players: updatedPlayers,
-        status: newStatus
-      });
+      await updateDoc(doc(db, 'rooms', currentRoomId), updatePayload);
     } catch (e) {
       console.error('Failed to update ready state:', e);
+    }
+  };
+
+  const resetMatchToLobby = async () => {
+    if (!currentRoomId || !room) return;
+    const puzzle = Math24Solver.generateSolvable();
+    const resetPlayers = room.players.map(p => ({
+      ...p,
+      score: 0,
+      isReady: false
+    }));
+
+    try {
+      await updateDoc(doc(db, 'rooms', currentRoomId), {
+        status: 'waiting',
+        players: resetPlayers,
+        currentPuzzle: {
+          numbers: puzzle.numbers,
+          solutions: puzzle.solutions
+        },
+        gameStartTime: null
+      });
+    } catch (e) {
+      console.error('Failed to reset room:', e);
     }
   };
 
@@ -312,6 +371,7 @@ export default function Multiplayer({ setView, profile }: Props) {
   };
 
   const myPlayerState = room?.players.find(p => p.uid === userId);
+  const sortedPlayers = room?.players ? [...room.players].sort((a, b) => b.score - a.score) : [];
 
   return (
     <div className="flex-1 flex flex-col p-6">
@@ -346,7 +406,7 @@ export default function Multiplayer({ setView, profile }: Props) {
             exit={{ opacity: 0, scale: 1.05 }}
             className="flex-1 flex flex-col justify-between"
           >
-            <div className="text-center bg-white border-4 border-slate-900 p-6 rounded-3xl shadow-[8px_8px_0px_0px_rgba(15,23,42,1)] mb-6">
+            <div className="text-center bg-white border-4 border-slate-900 p-6 rounded-3xl shadow-[8px_8px_0px_0px_rgba(15,23,42,1)] mb-4">
               <div className="w-16 h-16 bg-emerald-400 border-4 border-slate-900 rounded-3xl flex items-center justify-center mx-auto mb-3 shadow-[4px_4px_0px_0px_rgba(15,23,42,1)]">
                 <Users size={32} className="text-slate-900" />
               </div>
@@ -354,7 +414,31 @@ export default function Multiplayer({ setView, profile }: Props) {
               <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest px-2 leading-relaxed">Enter a room code to battle in real-time online</p>
             </div>
 
-            <div className="space-y-4 mb-6">
+            {/* Time Selection Before Room Creation */}
+            <div className="bg-white border-4 border-slate-900 p-4 rounded-3xl shadow-[6px_6px_0px_0px_rgba(15,23,42,1)] mb-4">
+              <div className="flex items-center gap-2 mb-2">
+                <Clock size={16} className="text-indigo-600 stroke-[3px]" />
+                <span className="text-xs font-black text-slate-900 uppercase italic">กำหนดเวลาการแข่งขัน (TIME LIMIT)</span>
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                {[60, 120, 180].map(sec => (
+                  <button
+                    key={sec}
+                    type="button"
+                    onClick={() => setSelectedTimeLimit(sec)}
+                    className={`py-2.5 rounded-xl border-3 border-slate-900 font-black text-xs uppercase tracking-wider transition-all italic ${
+                      selectedTimeLimit === sec 
+                        ? 'bg-indigo-600 text-white shadow-[3px_3px_0px_0px_rgba(15,23,42,1)] translate-x-[-1px] translate-y-[-1px]' 
+                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                    }`}
+                  >
+                    {sec} วินาที
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="space-y-4 mb-4">
               <div className="relative">
                 <input
                   type="text"
@@ -392,7 +476,7 @@ export default function Multiplayer({ setView, profile }: Props) {
                     <RefreshCw size={14} className="stroke-[3px]" />
                   </button>
                 </div>
-                <div className="space-y-2 max-h-36 overflow-y-auto pr-1">
+                <div className="space-y-2 max-h-32 overflow-y-auto pr-1">
                   {activeRooms.map(r => (
                     <div 
                       key={r.id} 
@@ -418,11 +502,11 @@ export default function Multiplayer({ setView, profile }: Props) {
             className="flex-1 flex flex-col justify-between"
           >
             {/* Header info */}
-            <div className="flex items-center justify-between mb-4 p-4 bg-white rounded-2xl border-4 border-slate-900 shadow-[4px_4px_0px_0px_rgba(15,23,42,1)]">
+            <div className="flex items-center justify-between mb-3 p-3 bg-white rounded-2xl border-4 border-slate-900 shadow-[4px_4px_0px_0px_rgba(15,23,42,1)]">
               <div className="flex items-center gap-2">
                 <div>
                   <div className="text-[9px] text-slate-400 uppercase font-black tracking-widest">CODE:</div>
-                  <div className="text-xl font-black text-indigo-600 italic tracking-wider">{room?.id}</div>
+                  <div className="text-lg font-black text-indigo-600 italic tracking-wider leading-none">{room?.id}</div>
                 </div>
                 <button 
                   onClick={copyRoomCode} 
@@ -432,40 +516,109 @@ export default function Multiplayer({ setView, profile }: Props) {
                   {copiedCode ? 'คัดลอกแล้ว!' : 'คัดลอก'}
                 </button>
               </div>
-              <div className={`px-4 py-1.5 text-xs font-black rounded-full border-2 border-slate-900 uppercase italic ${
-                room?.status === 'playing' ? 'bg-rose-500 text-white' : 'bg-emerald-400 text-slate-900'
-              }`}>
-                {room?.status === 'playing' ? '⚔️ BATTLE ON' : 'LOBBY WAITING'}
-              </div>
+
+              {room?.status === 'playing' ? (
+                <div className="flex items-center gap-1.5 px-3 py-1 bg-rose-500 text-white font-black rounded-full border-2 border-slate-900 text-xs italic shadow-[2px_2px_0px_0px_rgba(15,23,42,1)]">
+                  <Clock size={14} className="stroke-[3px] animate-pulse" />
+                  <span>{timeLeft}s</span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-1 px-3 py-1 bg-emerald-400 text-slate-900 font-black rounded-full border-2 border-slate-900 text-xs italic">
+                  <Clock size={12} className="stroke-[3px]" />
+                  <span>{room?.timeLimit || 60}s</span>
+                </div>
+              )}
             </div>
 
             {/* Players scoreboard */}
-            <div className="bg-white border-4 border-slate-900 p-4 rounded-2xl shadow-[4px_4px_0px_0px_rgba(15,23,42,1)] mb-4">
+            <div className="bg-white border-4 border-slate-900 p-3 rounded-2xl shadow-[4px_4px_0px_0px_rgba(15,23,42,1)] mb-3">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest italic">PLAYERS ({room?.players.length || 0})</span>
-                <span className="text-[9px] font-black bg-amber-100 text-amber-800 px-2 py-0.5 rounded-md border border-amber-900 uppercase">ต้องการ 2+ คน</span>
+                <span className="text-[9px] font-black bg-amber-100 text-amber-800 px-2 py-0.5 rounded-md border border-amber-900 uppercase">เวลา {room?.timeLimit || 60} วินาที</span>
               </div>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-2 gap-2 max-h-28 overflow-y-auto">
                 {room?.players.map((p) => (
-                  <div key={p.uid} className="flex items-center justify-between p-2.5 bg-slate-50 border-2 border-slate-900 rounded-xl">
-                    <div className="flex items-center gap-2 truncate">
-                      <div className="w-7 h-7 bg-yellow-400 border-2 border-slate-900 rounded-full flex items-center justify-center font-black text-slate-900 text-[10px] italic flex-shrink-0">
+                  <div key={p.uid} className="flex items-center justify-between p-2 bg-slate-50 border-2 border-slate-900 rounded-xl">
+                    <div className="flex items-center gap-1.5 truncate">
+                      <div className="w-6 h-6 bg-yellow-400 border-2 border-slate-900 rounded-full flex items-center justify-center font-black text-slate-900 text-[9px] italic flex-shrink-0">
                         {p.username[0]}
                       </div>
                       <span className="font-black text-slate-900 text-xs uppercase italic truncate">{p.username}</span>
                     </div>
-                    <div className="flex items-center gap-1.5 flex-shrink-0">
-                      <span className="font-black text-indigo-600 text-sm italic">{p.score} pt</span>
-                      {p.isReady && <CheckCircle size={14} className="text-emerald-500 stroke-[3px]" />}
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      <span className="font-black text-indigo-600 text-xs italic">{p.score} pt</span>
+                      {p.isReady && <CheckCircle size={13} className="text-emerald-500 stroke-[3px]" />}
                     </div>
                   </div>
                 ))}
               </div>
             </div>
 
-            {/* Main view: waiting vs playing */}
-            {room?.status === 'waiting' ? (
-              <div className="flex-1 flex flex-col items-center justify-center my-6 bg-white border-4 border-slate-900 p-6 rounded-3xl shadow-[6px_6px_0px_0px_rgba(15,23,42,1)] text-center">
+            {/* Main view: waiting vs playing vs finished */}
+            {room?.status === 'finished' ? (
+              /* Finished / Ranking Results View */
+              <div className="flex-1 flex flex-col justify-between my-2 bg-white border-4 border-slate-900 p-5 rounded-3xl shadow-[6px_6px_0px_0px_rgba(15,23,42,1)] text-center overflow-y-auto">
+                <div>
+                  <div className="w-16 h-16 bg-amber-400 border-4 border-slate-900 rounded-2xl flex items-center justify-center mx-auto mb-3 shadow-[4px_4px_0px_0px_rgba(15,23,42,1)]">
+                    <Crown size={38} className="text-slate-900 stroke-[2.5px]" />
+                  </div>
+                  <h2 className="text-2xl font-black text-slate-900 mb-1 italic tracking-tighter uppercase">จบการแข่งขัน!</h2>
+                  <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4">สรุปคะแนนและลำดับผู้ชนะ</p>
+
+                  {/* Top Winner Card */}
+                  {sortedPlayers.length > 0 && (
+                    <div className="bg-amber-100 border-4 border-slate-900 p-4 rounded-2xl mb-4 shadow-[4px_4px_0px_0px_rgba(15,23,42,1)] flex items-center gap-3">
+                      <div className="w-12 h-12 bg-amber-400 border-3 border-slate-900 rounded-xl flex items-center justify-center font-black text-2xl text-slate-900 italic shadow-[2px_2px_0px_0px_rgba(15,23,42,1)]">
+                        🏆
+                      </div>
+                      <div className="text-left truncate">
+                        <div className="text-[10px] font-black text-amber-800 uppercase tracking-widest">ผู้ชนะเลิศ (WINNER)</div>
+                        <div className="text-lg font-black text-slate-900 uppercase italic truncate">{sortedPlayers[0].username}</div>
+                        <div className="text-sm font-black text-indigo-600 italic">{sortedPlayers[0].score} PTS</div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* All players list */}
+                  <div className="space-y-2 mb-4">
+                    {sortedPlayers.map((p, idx) => {
+                      const badgeBg = idx === 0 ? 'bg-amber-400 text-slate-900' : idx === 1 ? 'bg-slate-300 text-slate-900' : idx === 2 ? 'bg-amber-700 text-white' : 'bg-slate-100 text-slate-800';
+                      return (
+                        <div key={p.uid} className="flex items-center justify-between p-2.5 bg-slate-50 border-2 border-slate-900 rounded-xl">
+                          <div className="flex items-center gap-2 truncate">
+                            <span className={`w-7 h-7 rounded-lg border-2 border-slate-900 flex items-center justify-center font-black text-xs italic ${badgeBg}`}>
+                              #{idx + 1}
+                            </span>
+                            <span className="font-black text-slate-900 text-sm uppercase italic truncate">
+                              {p.username} {p.uid === userId ? '(คุณ)' : ''}
+                            </span>
+                          </div>
+                          <div className="text-right font-black text-indigo-600 italic text-base">
+                            {p.score} PTS
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 pt-2">
+                  <button
+                    onClick={leaveRoom}
+                    className="w-full bg-slate-200 text-slate-800 font-black py-3.5 rounded-2xl border-4 border-slate-900 shadow-[4px_4px_0px_0px_rgba(15,23,42,1)] active:shadow-none active:translate-x-[3px] active:translate-y-[3px] text-xs uppercase tracking-wider"
+                  >
+                    ออกจากห้อง
+                  </button>
+                  <button
+                    onClick={resetMatchToLobby}
+                    className="w-full bg-indigo-600 text-white font-black py-3.5 rounded-2xl border-4 border-slate-900 shadow-[4px_4px_0px_0px_rgba(15,23,42,1)] active:shadow-none active:translate-x-[3px] active:translate-y-[3px] text-xs uppercase tracking-wider italic"
+                  >
+                    เล่นอีกรอบ
+                  </button>
+                </div>
+              </div>
+            ) : room?.status === 'waiting' ? (
+              <div className="flex-1 flex flex-col items-center justify-center my-4 bg-white border-4 border-slate-900 p-6 rounded-3xl shadow-[6px_6px_0px_0px_rgba(15,23,42,1)] text-center">
                 <Users size={48} className="text-indigo-600 mb-3" />
                 <h3 className="text-xl font-black text-slate-900 mb-1 uppercase tracking-tight italic">WAITING FOR PLAYERS</h3>
                 <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-4">แชร์รหัสห้อง <span className="text-indigo-600 font-black">{room?.id}</span> ให้เพื่อนเข้าร่วม</p>
@@ -549,7 +702,7 @@ export default function Multiplayer({ setView, profile }: Props) {
                     <RotateCcw size={16} className="inline mr-1 stroke-[3px]" /> UNDO
                   </button>
                   <button
-                    onClick={() => alert(`Hint: ${room?.currentPuzzle?.solutions?.[0]}`)}
+                    onClick={() => setShowHintModal(true)}
                     className="flex-1 py-3 bg-white border-4 border-slate-900 rounded-xl font-black text-xs uppercase tracking-widest shadow-[3px_3px_0px_0px_rgba(15,23,42,1)]"
                   >
                     <Lightbulb size={16} className="inline mr-1 stroke-[3px]" /> HINT
@@ -560,7 +713,38 @@ export default function Multiplayer({ setView, profile }: Props) {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Hint Modal */}
+      {showHintModal && (
+        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-50 flex items-center justify-center p-6">
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-white border-8 border-slate-900 p-6 rounded-[36px] w-full max-w-sm text-center shadow-[16px_16px_0px_0px_rgba(15,23,42,1)]"
+          >
+            <div className="w-16 h-16 bg-amber-400 border-4 border-slate-900 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-[4px_4px_0px_0px_rgba(15,23,42,1)]">
+              <Lightbulb size={36} className="text-slate-900 stroke-[2.5px]" />
+            </div>
+            <h2 className="text-2xl font-black text-slate-900 mb-1 italic tracking-tighter uppercase">คำใบ้ (HINT)</h2>
+            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4">แนวทางในการคิดให้ได้ 24</p>
+
+            <div className="bg-amber-50 border-4 border-slate-900 p-4 rounded-2xl mb-6 shadow-[4px_4px_0px_0px_rgba(15,23,42,1)]">
+              <span className="text-xl font-black text-indigo-600 font-mono italic break-all">
+                {room?.currentPuzzle?.solutions?.[0] ? `Hint: ${room.currentPuzzle.solutions[0]}` : 'ไม่พบเฉลย'}
+              </span>
+            </div>
+
+            <button
+              onClick={() => setShowHintModal(false)}
+              className="w-full bg-slate-900 text-white font-black py-3.5 rounded-2xl border-4 border-slate-900 shadow-[4px_4px_0px_0px_rgba(15,23,42,1)] active:shadow-none active:translate-x-[4px] active:translate-y-[4px] text-base uppercase tracking-widest italic"
+            >
+              เข้าใจแล้ว (OK)
+            </button>
+          </motion.div>
+        </div>
+      )}
     </div>
   );
 }
+
 
