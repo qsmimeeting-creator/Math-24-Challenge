@@ -9,7 +9,7 @@ import { doc, setDoc, getDoc, updateDoc, onSnapshot, collection, getDocs, query,
 import { UserProfile, Room, Player } from '../types';
 import { Math24Solver } from '../utils/math24';
 import { motion, AnimatePresence } from 'motion/react';
-import { ChevronLeft, Users, Play, Trophy, RefreshCw, CheckCircle, RotateCcw, Lightbulb, Clock, Crown, Medal, Award } from 'lucide-react';
+import { ChevronLeft, Users, Play, Trophy, RefreshCw, CheckCircle, RotateCcw, Clock, Crown, Medal, Award, SkipForward } from 'lucide-react';
 
 interface Props {
   setView: (view: any) => void;
@@ -40,7 +40,6 @@ export default function Multiplayer({ setView, profile }: Props) {
   const [gameMessage, setGameMessage] = useState('FIRST NUMBER');
   const [solvedNotice, setSolvedNotice] = useState<string | null>(null);
   const [timeLeft, setTimeLeft] = useState<number>(60);
-  const [showHintModal, setShowHintModal] = useState(false);
 
   const username = profile?.username || 'PLAYER';
   const userId = profile?.uid || `guest_${Math.random().toString(36).substring(2, 8)}`;
@@ -78,18 +77,8 @@ export default function Multiplayer({ setView, profile }: Props) {
         const data = snapshot.data() as Room;
         setRoom(data);
 
-        // Sync board cards if puzzle changed
-        if (data.currentPuzzle && data.currentPuzzle.numbers) {
-          const newNums = data.currentPuzzle.numbers;
-          setCards(newNums.map((n, i) => ({
-            id: `card-${i}`,
-            val: n,
-            expr: `${n}`
-          })));
-          setHistory([]);
-          setSelectedId(null);
-          setSelectedOp(null);
-          setGameMessage('FIRST NUMBER');
+        if (data.timeLimit) {
+          setSelectedTimeLimit(data.timeLimit);
         }
       } else {
         setErrorMsg('Room was closed or does not exist.');
@@ -103,11 +92,27 @@ export default function Multiplayer({ setView, profile }: Props) {
     return () => unsubscribe();
   }, [currentRoomId]);
 
+  // Sync initial board cards when game starts
+  useEffect(() => {
+    if (room?.status === 'playing' && room.currentPuzzle?.numbers && room.gameStartTime) {
+      const newNums = room.currentPuzzle.numbers;
+      setCards(newNums.map((n, i) => ({
+        id: `card-${i}`,
+        val: n,
+        expr: `${n}`
+      })));
+      setHistory([]);
+      setSelectedId(null);
+      setSelectedOp(null);
+      setGameMessage('FIRST NUMBER');
+    }
+  }, [room?.status, room?.gameStartTime]);
+
   // Countdown timer effect during 'playing' state
   useEffect(() => {
     if (room?.status !== 'playing' || !room.gameStartTime) return;
 
-    const limitSecs = room.timeLimit || 60;
+    const limitSecs = room.timeLimit || selectedTimeLimit || 60;
 
     const updateTimer = () => {
       const elapsed = Math.floor((Date.now() - room.gameStartTime!) / 1000);
@@ -126,7 +131,7 @@ export default function Multiplayer({ setView, profile }: Props) {
     const timerInterval = setInterval(updateTimer, 500);
 
     return () => clearInterval(timerInterval);
-  }, [room?.status, room?.gameStartTime, room?.timeLimit, currentRoomId]);
+  }, [room?.status, room?.gameStartTime, room?.timeLimit, currentRoomId, selectedTimeLimit]);
 
   const [copiedCode, setCopiedCode] = useState(false);
 
@@ -226,6 +231,44 @@ export default function Multiplayer({ setView, profile }: Props) {
     }
   };
 
+  const isHost = room 
+    ? (room.hostId ? room.hostId === userId : room.players?.[0]?.uid === userId) 
+    : false;
+
+  const changeTimeLimit = async (newLimit: number) => {
+    setSelectedTimeLimit(newLimit);
+    if (currentRoomId && room) {
+      try {
+        await updateDoc(doc(db, 'rooms', currentRoomId), {
+          timeLimit: newLimit
+        });
+      } catch (e) {
+        console.error('Failed to update time limit:', e);
+      }
+    }
+  };
+
+  const startGameByHost = async () => {
+    if (!currentRoomId || !room) return;
+    if (room.players.length < 2) {
+      setErrorMsg('ต้องมีผู้เล่นอย่างน้อย 2 คนเพื่อเริ่มเกม');
+      return;
+    }
+
+    const effectiveTimeLimit = room.timeLimit || selectedTimeLimit || 60;
+
+    try {
+      await updateDoc(doc(db, 'rooms', currentRoomId), {
+        status: 'playing',
+        gameStartTime: Date.now(),
+        timeLimit: effectiveTimeLimit
+      });
+      setTimeLeft(effectiveTimeLimit);
+    } catch (e) {
+      console.error('Failed to start game:', e);
+    }
+  };
+
   const toggleReady = async () => {
     if (!currentRoomId || !room) return;
 
@@ -236,21 +279,10 @@ export default function Multiplayer({ setView, profile }: Props) {
       return p;
     });
 
-    const hasMinPlayers = updatedPlayers.length >= 2;
-    const allReady = hasMinPlayers && updatedPlayers.every(p => p.isReady);
-    const newStatus = allReady ? 'playing' : 'waiting';
-
-    const updatePayload: Partial<Room> = {
-      players: updatedPlayers,
-      status: newStatus
-    };
-
-    if (allReady) {
-      updatePayload.gameStartTime = Date.now();
-    }
-
     try {
-      await updateDoc(doc(db, 'rooms', currentRoomId), updatePayload);
+      await updateDoc(doc(db, 'rooms', currentRoomId), {
+        players: updatedPlayers
+      });
     } catch (e) {
       console.error('Failed to update ready state:', e);
     }
@@ -338,8 +370,6 @@ export default function Multiplayer({ setView, profile }: Props) {
 
     setSolvedNotice('🎉 PERFECT 24! (+10 POINTS)');
 
-    // Update player score in Firestore and generate new puzzle
-    const nextPuzzle = Math24Solver.generateSolvable();
     const updatedPlayers = room.players.map(p => {
       if (p.uid === userId) {
         return { ...p, score: p.score + 10 };
@@ -349,16 +379,43 @@ export default function Multiplayer({ setView, profile }: Props) {
 
     try {
       await updateDoc(doc(db, 'rooms', currentRoomId), {
-        players: updatedPlayers,
-        currentPuzzle: {
-          numbers: nextPuzzle.numbers,
-          solutions: nextPuzzle.solutions
-        }
+        players: updatedPlayers
       });
     } catch (e) {
       console.error('Failed to submit score:', e);
     }
 
+    // Generate new puzzle for this player locally
+    const nextPuzzle = Math24Solver.generateSolvable();
+    setCards(nextPuzzle.numbers.map((n, i) => ({
+      id: `card-${i}`,
+      val: n,
+      expr: `${n}`
+    })));
+    setHistory([]);
+    setSelectedId(null);
+    setSelectedOp(null);
+    setGameMessage('FIRST NUMBER');
+
+    setTimeout(() => {
+      setSolvedNotice(null);
+    }, 1800);
+  };
+
+  const handleSkip = () => {
+    // Generate new puzzle specifically for the player who pressed SKIP
+    const nextPuzzle = Math24Solver.generateSolvable();
+    setCards(nextPuzzle.numbers.map((n, i) => ({
+      id: `card-${i}`,
+      val: n,
+      expr: `${n}`
+    })));
+    setHistory([]);
+    setSelectedId(null);
+    setSelectedOp(null);
+    setGameMessage('FIRST NUMBER');
+
+    setSolvedNotice('⏩ ข้ามโจทย์แล้ว (SKIPPED)');
     setTimeout(() => {
       setSolvedNotice(null);
     }, 1800);
@@ -618,26 +675,86 @@ export default function Multiplayer({ setView, profile }: Props) {
                 </div>
               </div>
             ) : room?.status === 'waiting' ? (
-              <div className="flex-1 flex flex-col items-center justify-center my-4 bg-white border-4 border-slate-900 p-6 rounded-3xl shadow-[6px_6px_0px_0px_rgba(15,23,42,1)] text-center">
-                <Users size={48} className="text-indigo-600 mb-3" />
-                <h3 className="text-xl font-black text-slate-900 mb-1 uppercase tracking-tight italic">WAITING FOR PLAYERS</h3>
-                <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-4">แชร์รหัสห้อง <span className="text-indigo-600 font-black">{room?.id}</span> ให้เพื่อนเข้าร่วม</p>
-
-                {(room?.players.length || 0) < 2 && (
-                  <p className="text-xs font-black text-amber-600 bg-amber-50 border-2 border-amber-300 px-4 py-2 rounded-xl mb-4 animate-pulse">
-                    ⚠️ ต้องมีผู้เล่นอย่างน้อย 2 คนขึ้นไปเพื่อเริ่มเกม
+              <div className="flex-1 flex flex-col justify-between my-2 bg-white border-4 border-slate-900 p-5 rounded-3xl shadow-[6px_6px_0px_0px_rgba(15,23,42,1)] text-center overflow-y-auto">
+                <div>
+                  <div className="w-14 h-14 bg-indigo-100 border-4 border-slate-900 rounded-2xl flex items-center justify-center mx-auto mb-2 shadow-[3px_3px_0px_0px_rgba(15,23,42,1)]">
+                    <Users size={32} className="text-indigo-600 stroke-[2.5px]" />
+                  </div>
+                  <h3 className="text-xl font-black text-slate-900 mb-1 uppercase tracking-tight italic">ห้องรอผู้เล่น (LOBBY)</h3>
+                  <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">
+                    แชร์รหัสห้อง <span className="text-indigo-600 font-black">{room?.id}</span> ให้เพื่อนเข้าร่วม
                   </p>
-                )}
 
-                <button
-                  onClick={toggleReady}
-                  className={`w-full flex items-center justify-center gap-3 font-black py-4 rounded-2xl border-4 border-slate-900 shadow-[6px_6px_0px_0px_rgba(15,23,42,1)] active:shadow-none active:translate-x-[4px] active:translate-y-[4px] uppercase tracking-widest italic text-lg ${
-                    myPlayerState?.isReady ? 'bg-emerald-400 text-slate-900' : 'bg-rose-500 text-white'
-                  }`}
-                >
-                  <Play size={20} fill="currentColor" className="stroke-[3px]" />
-                  {myPlayerState?.isReady ? 'พร้อมแล้ว! (รอผู้เล่นครบและพร้อม)' : 'กดพร้อมเล่น (READY)'}
-                </button>
+                  {/* Time Limit Settings in Waiting Room */}
+                  <div className="bg-slate-50 border-3 border-slate-900 p-3 rounded-2xl mb-3 text-left">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-xs font-black text-slate-900 uppercase italic flex items-center gap-1.5">
+                        <Clock size={14} className="text-indigo-600 stroke-[3px]" />
+                        เวลาการแข่งขัน:
+                      </span>
+                      <span className="text-xs font-black text-indigo-600 italic bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-200">
+                        {room?.timeLimit || selectedTimeLimit || 60} วินาที
+                      </span>
+                    </div>
+                    {isHost ? (
+                      <div className="grid grid-cols-3 gap-1.5 pt-1">
+                        {[60, 120, 180].map(sec => (
+                          <button
+                            key={sec}
+                            type="button"
+                            onClick={() => changeTimeLimit(sec)}
+                            className={`py-1.5 rounded-lg border-2 border-slate-900 font-black text-[11px] uppercase tracking-wider transition-all italic ${
+                              (room?.timeLimit || selectedTimeLimit) === sec
+                                ? 'bg-indigo-600 text-white shadow-[2px_2px_0px_0px_rgba(15,23,42,1)]'
+                                : 'bg-white text-slate-700 hover:bg-slate-100'
+                            }`}
+                          >
+                            {sec}s
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-[10px] text-slate-500 font-bold">
+                        (ผู้สร้างห้องกำหนดเวลาการแข่งขัน)
+                      </p>
+                    )}
+                  </div>
+
+                  {(room?.players.length || 0) < 2 && (
+                    <div className="text-xs font-black text-amber-800 bg-amber-50 border-2 border-amber-400 p-2.5 rounded-xl mb-3 animate-pulse">
+                      ⚠️ ต้องมีผู้เล่นอย่างน้อย 2 คนขึ้นไปเพื่อเริ่มเกม
+                    </div>
+                  )}
+                </div>
+
+                <div className="w-full space-y-2.5 pt-2">
+                  {/* Ready Toggle */}
+                  <button
+                    onClick={toggleReady}
+                    className={`w-full flex items-center justify-center gap-2 font-black py-3 rounded-2xl border-4 border-slate-900 shadow-[4px_4px_0px_0px_rgba(15,23,42,1)] active:shadow-none active:translate-x-[3px] active:translate-y-[3px] uppercase tracking-wider italic text-sm ${
+                      myPlayerState?.isReady ? 'bg-emerald-400 text-slate-900' : 'bg-slate-200 text-slate-800'
+                    }`}
+                  >
+                    <CheckCircle size={18} className="stroke-[3px]" />
+                    {myPlayerState?.isReady ? 'สถานะ: พร้อมเล่นแล้ว ✓' : 'สถานะ: กดเพื่อเตรียมพร้อม (READY)'}
+                  </button>
+
+                  {/* Start Game Button (Host Only) */}
+                  {isHost ? (
+                    <button
+                      onClick={startGameByHost}
+                      disabled={(room?.players.length || 0) < 2}
+                      className="w-full flex items-center justify-center gap-2 font-black py-3.5 rounded-2xl border-4 border-slate-900 bg-indigo-600 text-white shadow-[4px_4px_0px_0px_rgba(15,23,42,1)] active:shadow-none active:translate-x-[3px] active:translate-y-[3px] uppercase tracking-wider italic text-base disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <Play size={20} fill="currentColor" className="stroke-[3px]" />
+                      🚀 เริ่มเกมส์ (START GAME)
+                    </button>
+                  ) : (
+                    <div className="p-3 bg-amber-50 border-2 border-slate-900 rounded-xl text-xs font-black text-slate-700 italic">
+                      ⏳ รอผู้สร้างห้องกด "เริ่มเกมส์"
+                    </div>
+                  )}
+                </div>
               </div>
             ) : (
               /* Playing view */
@@ -702,10 +819,10 @@ export default function Multiplayer({ setView, profile }: Props) {
                     <RotateCcw size={16} className="inline mr-1 stroke-[3px]" /> UNDO
                   </button>
                   <button
-                    onClick={() => setShowHintModal(true)}
-                    className="flex-1 py-3 bg-white border-4 border-slate-900 rounded-xl font-black text-xs uppercase tracking-widest shadow-[3px_3px_0px_0px_rgba(15,23,42,1)]"
+                    onClick={handleSkip}
+                    className="flex-1 py-3 bg-white border-4 border-slate-900 rounded-xl font-black text-xs uppercase tracking-widest shadow-[3px_3px_0px_0px_rgba(15,23,42,1)] active:shadow-none active:translate-x-[2px] active:translate-y-[2px]"
                   >
-                    <Lightbulb size={16} className="inline mr-1 stroke-[3px]" /> HINT
+                    <SkipForward size={16} className="inline mr-1 stroke-[3px]" /> SKIP (ข้าม)
                   </button>
                 </div>
               </div>
@@ -713,36 +830,6 @@ export default function Multiplayer({ setView, profile }: Props) {
           </motion.div>
         )}
       </AnimatePresence>
-
-      {/* Hint Modal */}
-      {showHintModal && (
-        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-50 flex items-center justify-center p-6">
-          <motion.div 
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="bg-white border-8 border-slate-900 p-6 rounded-[36px] w-full max-w-sm text-center shadow-[16px_16px_0px_0px_rgba(15,23,42,1)]"
-          >
-            <div className="w-16 h-16 bg-amber-400 border-4 border-slate-900 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-[4px_4px_0px_0px_rgba(15,23,42,1)]">
-              <Lightbulb size={36} className="text-slate-900 stroke-[2.5px]" />
-            </div>
-            <h2 className="text-2xl font-black text-slate-900 mb-1 italic tracking-tighter uppercase">คำใบ้ (HINT)</h2>
-            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4">แนวทางในการคิดให้ได้ 24</p>
-
-            <div className="bg-amber-50 border-4 border-slate-900 p-4 rounded-2xl mb-6 shadow-[4px_4px_0px_0px_rgba(15,23,42,1)]">
-              <span className="text-xl font-black text-indigo-600 font-mono italic break-all">
-                {room?.currentPuzzle?.solutions?.[0] ? `Hint: ${room.currentPuzzle.solutions[0]}` : 'ไม่พบเฉลย'}
-              </span>
-            </div>
-
-            <button
-              onClick={() => setShowHintModal(false)}
-              className="w-full bg-slate-900 text-white font-black py-3.5 rounded-2xl border-4 border-slate-900 shadow-[4px_4px_0px_0px_rgba(15,23,42,1)] active:shadow-none active:translate-x-[4px] active:translate-y-[4px] text-base uppercase tracking-widest italic"
-            >
-              เข้าใจแล้ว (OK)
-            </button>
-          </motion.div>
-        </div>
-      )}
     </div>
   );
 }
