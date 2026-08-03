@@ -148,7 +148,7 @@ export default function Game({ setView, profile }: Props) {
   };
 
   const handleSuccess = async () => {
-    setScore(prev => prev + 1);
+    setScore(prev => prev + 10);
     setStreak(prev => prev + 1);
     if (timerEnabled) {
       setTimeLeft(prev => prev + 15);
@@ -376,7 +376,7 @@ export default function Game({ setView, profile }: Props) {
               <CheckCircle size={48} className="text-slate-900 stroke-[3px]" />
             </div>
             <h2 className="text-3xl font-black text-slate-900 mb-1 italic tracking-tighter uppercase">คำตอบถูกต้อง!</h2>
-            <p className="text-sm font-black text-emerald-600 mb-4 uppercase tracking-wider">🎉 PERFECT 24! (+1 คะแนน)</p>
+            <p className="text-sm font-black text-emerald-600 mb-4 uppercase tracking-wider">🎉 PERFECT 24! (+10 คะแนน)</p>
             <div className="bg-slate-100 border-2 border-slate-900 p-3 rounded-2xl mb-6">
               <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">คะแนนสะสมปัจจุบัน</p>
               <p className="text-3xl font-black text-indigo-600 italic">{score} คะแนน</p>

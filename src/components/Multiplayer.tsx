@@ -277,13 +277,13 @@ export default function Multiplayer({ setView, profile }: Props) {
   const handlePlayerSolve = async () => {
     if (!currentRoomId || !room) return;
 
-    setSolvedNotice('🎉 PERFECT 24! (+1 POINT)');
+    setSolvedNotice('🎉 PERFECT 24! (+10 POINTS)');
 
     // Update player score in Firestore and generate new puzzle
     const nextPuzzle = Math24Solver.generateSolvable();
     const updatedPlayers = room.players.map(p => {
       if (p.uid === userId) {
-        return { ...p, score: p.score + 1 };
+        return { ...p, score: p.score + 10 };
       }
       return p;
     });
