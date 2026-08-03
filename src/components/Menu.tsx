@@ -11,9 +11,10 @@ import { auth } from '../lib/firebase';
 interface Props {
   setView: (view: any) => void;
   profile: UserProfile | null;
+  onLogout?: () => void;
 }
 
-export default function Menu({ setView, profile }: Props) {
+export default function Menu({ setView, profile, onLogout }: Props) {
   return (
     <div className="flex-1 flex flex-col p-6">
       <header className="flex items-center justify-between mb-12 bg-white p-4 rounded-2xl border-4 border-slate-900 shadow-[4px_4px_0px_0px_rgba(15,23,42,1)]">
@@ -25,8 +26,15 @@ export default function Menu({ setView, profile }: Props) {
           </div>
         </div>
         <button 
-          onClick={() => auth.signOut()}
+          onClick={() => {
+            if (onLogout) {
+              onLogout();
+            } else {
+              auth.signOut();
+            }
+          }}
           className="p-2 bg-rose-500 text-white rounded-xl border-2 border-slate-900 shadow-[2px_2px_0px_0px_rgba(15,23,42,1)] active:shadow-none active:translate-x-[1px] active:translate-y-[1px]"
+          title="Change Name / Exit"
         >
           <LogOut size={18} />
         </button>

@@ -18,57 +18,34 @@ import { motion, AnimatePresence } from 'motion/react';
 type View = 'menu' | 'game' | 'leaderboard' | 'multiplayer' | 'settings';
 
 export default function App() {
-  const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [view, setView] = useState<View>('menu');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Check for guest profile in localStorage
-    const savedGuest = localStorage.getItem('math24_guest_profile');
-    if (savedGuest) {
+    // Check for saved user or guest profile in localStorage
+    const saved = localStorage.getItem('math24_user_profile') || localStorage.getItem('math24_guest_profile');
+    if (saved) {
       try {
-        const profile = JSON.parse(savedGuest);
-        setProfile(profile);
-        setLoading(false);
+        const loadedProfile = JSON.parse(saved);
+        setProfile(loadedProfile);
       } catch (e) {
+        localStorage.removeItem('math24_user_profile');
         localStorage.removeItem('math24_guest_profile');
       }
     }
+    setLoading(false);
 
-    // Safety timeout to prevent getting stuck on loading screen
-    const timeoutId = setTimeout(() => {
-      if (loading) {
-        console.warn('Auth state change timed out, forcing loading to false');
-        setLoading(false);
-      }
-    }, 5000);
-
+    // Optional Firebase listener if user is logged in via Auth
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      try {
-        setUser(user);
-        if (user) {
-          // If we have a Firebase user, clear the guest profile to avoid confusion
-          localStorage.removeItem('math24_guest_profile');
-          
+      if (user) {
+        try {
           const docRef = doc(db, 'users', user.uid);
           const docSnap = await getDoc(docRef);
           
           if (docSnap.exists()) {
-            const existingProfile = docSnap.data() as UserProfile;
-            // Update username if we now have a displayName that is different from stored username
-            // or if stored username is 'Player' and we have something better
-            const currentDisplayName = user.displayName || 'Player';
-            if (existingProfile.username !== currentDisplayName && currentDisplayName !== 'Player') {
-              const updatedProfile = { ...existingProfile, username: currentDisplayName };
-              await setDoc(docRef, updatedProfile);
-              setProfile(updatedProfile);
-            } else {
-              setProfile(existingProfile);
-            }
+            setProfile(docSnap.data() as UserProfile);
           } else {
-            // Wait a moment for displayName to potentially propagate if we just signed in
-            // though user.reload() in Auth.tsx should handle this
             const newProfile: UserProfile = {
               uid: user.uid,
               username: user.displayName || 'Player',
@@ -77,25 +54,29 @@ export default function App() {
               bestTime: 0,
               createdAt: Date.now()
             };
-            await setDoc(docRef, newProfile);
+            await setDoc(docRef, newProfile).catch(() => {});
             setProfile(newProfile);
           }
-        } else if (!savedGuest) {
-          setProfile(null);
+        } catch (error) {
+          console.error('Error fetching user profile:', error);
         }
-      } catch (error) {
-        console.error('Error fetching user profile:', error);
-      } finally {
-        setLoading(false);
-        clearTimeout(timeoutId);
       }
     });
-    
-    return () => {
-      unsubscribe();
-      clearTimeout(timeoutId);
-    };
+
+    return () => unsubscribe();
   }, []);
+
+  const handleLogin = (newProfile: UserProfile) => {
+    setProfile(newProfile);
+    localStorage.setItem('math24_user_profile', JSON.stringify(newProfile));
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('math24_user_profile');
+    localStorage.removeItem('math24_guest_profile');
+    setProfile(null);
+    auth.signOut().catch(() => {});
+  };
 
   if (loading) {
     return (
@@ -113,8 +94,8 @@ export default function App() {
     );
   }
 
-  if (!user) {
-    return <Auth />;
+  if (!profile) {
+    return <Auth onLogin={handleLogin} />;
   }
 
   return (
@@ -128,7 +109,7 @@ export default function App() {
           transition={{ duration: 0.2 }}
           className="max-w-md mx-auto min-h-screen flex flex-col"
         >
-          {view === 'menu' && <Menu setView={setView} profile={profile} />}
+          {view === 'menu' && <Menu setView={setView} profile={profile} onLogout={handleLogout} />}
           {view === 'game' && <Game setView={setView} profile={profile} />}
           {view === 'leaderboard' && <Leaderboard setView={setView} />}
           {view === 'multiplayer' && <Multiplayer setView={setView} profile={profile} />}

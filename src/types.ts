@@ -18,7 +18,7 @@ export interface ScoreEntry {
   username: string;
   score: number;
   time: number;
-  mode: 'classic' | 'time';
+  mode: 'classic' | 'time' | 'untimed' | string;
   timestamp: number;
 }
 

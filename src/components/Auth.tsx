@@ -8,55 +8,50 @@ import { auth } from '../lib/firebase';
 import { motion } from 'motion/react';
 import { Play } from 'lucide-react';
 import { useState, FormEvent } from 'react';
+import { UserProfile } from '../types';
 
-export default function Auth() {
+interface Props {
+  onLogin?: (profile: UserProfile) => void;
+}
+
+export default function Auth({ onLogin }: Props) {
   const [username, setUsername] = useState('');
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   const handleStart = async (e: FormEvent) => {
     e.preventDefault();
-    if (!username.trim() || loading) return;
+    const trimmedName = username.trim().toUpperCase();
+    if (!trimmedName || loading) return;
 
     setLoading(true);
-    setError(null);
-    try {
-      // Try to sign in anonymously
-      const userCredential = await signInAnonymously(auth);
-      const user = userCredential.user;
-      
-      await updateProfile(user, {
-        displayName: username.trim()
-      });
 
-      await user.reload();
-      // App.tsx will pick up the auth state change
-    } catch (err: any) {
-      console.error('Firebase Auth failed, entering Guest Mode:', err);
-      
-      // Fallback to Guest Mode if Auth fails
-      const guestId = `guest-${Math.random().toString(36).substring(2, 11)}`;
-      const guestProfile = {
-        uid: guestId,
-        username: username.trim(),
-        isGuest: true,
-        avatar: '',
-        bestScore: 0,
-        bestTime: 0,
-        createdAt: Date.now()
-      };
-      
-      // Store in localStorage for persistence
-      localStorage.setItem('math24_guest_profile', JSON.stringify(guestProfile));
-      
-      // We need a way to tell App.tsx to use this guest profile
-      // We'll use a custom event or just window reload if needed, 
-      // but better to use a global state or just a simple callback if Auth.tsx had one.
-      // Since Auth.tsx is rendered by App.tsx when profile is null, we can't easily pass it back 
-      // without changing App.tsx props.
-      
-      // Let's trigger a page reload to let App.tsx pick up the localStorage guest profile
-      window.location.reload();
+    const newProfile: UserProfile = {
+      uid: `user_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      username: trimmedName,
+      avatar: '',
+      bestScore: 0,
+      bestTime: 0,
+      createdAt: Date.now()
+    };
+
+    // Save locally
+    localStorage.setItem('math24_user_profile', JSON.stringify(newProfile));
+
+    // Try background Firebase anonymous sign-in if supported
+    try {
+      const userCredential = await signInAnonymously(auth);
+      if (userCredential.user) {
+        newProfile.uid = userCredential.user.uid;
+        await updateProfile(userCredential.user, { displayName: trimmedName });
+        localStorage.setItem('math24_user_profile', JSON.stringify(newProfile));
+      }
+    } catch (err) {
+      console.log('Firebase Auth not available, proceeding with local profile:', err);
+    }
+
+    setLoading(false);
+    if (onLogin) {
+      onLogin(newProfile);
     }
   };
 
@@ -74,12 +69,6 @@ export default function Auth() {
           MATH<span className="text-rose-500">24</span>
         </h1>
         <p className="text-slate-800 font-bold uppercase tracking-widest text-xs mb-10">The Ultimate Calculation Challenge</p>
-        
-        {error && (
-          <div className="mb-6 p-4 bg-rose-100 border-4 border-rose-500 rounded-2xl text-rose-700 text-[10px] font-black uppercase tracking-widest italic leading-relaxed">
-            {error}
-          </div>
-        )}
 
         <form onSubmit={handleStart} className="space-y-4">
           <div className="relative">

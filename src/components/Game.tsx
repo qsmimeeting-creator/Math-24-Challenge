@@ -30,6 +30,7 @@ export default function Game({ setView, profile }: Props) {
   const [selectedOp, setSelectedOp] = useState<string | null>(null);
   const [score, setScore] = useState(0);
   const [streak, setStreak] = useState(0);
+  const [timerEnabled, setTimerEnabled] = useState(true);
   const [timeLeft, setTimeLeft] = useState(60);
   const [isGameOver, setIsGameOver] = useState(false);
   const [message, setMessage] = useState('FIRST NUMBER');
@@ -40,13 +41,13 @@ export default function Game({ setView, profile }: Props) {
   }, []);
 
   useEffect(() => {
-    if (timeLeft > 0 && !isGameOver) {
+    if (timerEnabled && timeLeft > 0 && !isGameOver) {
       const timer = setTimeout(() => setTimeLeft(timeLeft - 1), 1000);
       return () => clearTimeout(timer);
-    } else if (timeLeft === 0 && !isGameOver) {
+    } else if (timerEnabled && timeLeft === 0 && !isGameOver) {
       handleGameOver();
     }
-  }, [timeLeft, isGameOver]);
+  }, [timeLeft, isGameOver, timerEnabled]);
 
   const startNewPuzzle = () => {
     setIsGameOver(false);
@@ -141,9 +142,11 @@ export default function Game({ setView, profile }: Props) {
   };
 
   const handleSuccess = async () => {
-    setScore(score + 100 + streak * 10);
-    setStreak(streak + 1);
-    setTimeLeft(prev => prev + 15);
+    setScore(prev => prev + 100 + streak * 10);
+    setStreak(prev => prev + 1);
+    if (timerEnabled) {
+      setTimeLeft(prev => prev + 15);
+    }
     setMessage('SOLVED! PERFECT');
     
     setTimeout(() => {
@@ -153,15 +156,44 @@ export default function Game({ setView, profile }: Props) {
 
   const handleGameOver = async () => {
     setIsGameOver(true);
-    if (profile) {
-      await addDoc(collection(db, 'leaderboard'), {
-        userId: profile.uid,
-        username: profile.username,
-        score,
-        time: 60 - timeLeft,
-        mode: 'time',
-        timestamp: serverTimestamp()
-      });
+    const finalScore = score;
+    const currentUsername = profile?.username || 'PLAYER';
+    const currentUid = profile?.uid || 'guest';
+
+    const newScoreEntry = {
+      id: `score_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      userId: currentUid,
+      username: currentUsername,
+      score: finalScore,
+      time: timerEnabled ? Math.max(0, 60 - timeLeft) : 0,
+      mode: timerEnabled ? 'time' : 'untimed',
+      timestamp: Date.now()
+    };
+
+    // Save to local storage
+    try {
+      const existing = JSON.parse(localStorage.getItem('math24_leaderboard') || '[]');
+      existing.push(newScoreEntry);
+      existing.sort((a: any, b: any) => b.score - a.score);
+      localStorage.setItem('math24_leaderboard', JSON.stringify(existing.slice(0, 50)));
+    } catch (e) {
+      console.error('Failed to save to local storage', e);
+    }
+
+    // Also attempt Firestore save
+    if (profile && finalScore > 0) {
+      try {
+        await addDoc(collection(db, 'leaderboard'), {
+          userId: currentUid,
+          username: currentUsername,
+          score: finalScore,
+          time: timerEnabled ? Math.max(0, 60 - timeLeft) : 0,
+          mode: timerEnabled ? 'time' : 'untimed',
+          timestamp: serverTimestamp()
+        });
+      } catch (err) {
+        console.warn('Firestore write failed, saved locally:', err);
+      }
     }
   };
 
@@ -178,12 +210,21 @@ export default function Game({ setView, profile }: Props) {
 
   return (
     <div className="flex-1 flex flex-col p-6">
-      <header className="flex items-center justify-between mb-8 bg-white p-4 rounded-2xl border-4 border-slate-900 shadow-[4px_4px_0px_0px_rgba(15,23,42,1)]">
+      <header className="flex items-center justify-between mb-6 bg-white p-4 rounded-2xl border-4 border-slate-900 shadow-[4px_4px_0px_0px_rgba(15,23,42,1)]">
         <button onClick={() => setView('menu')} className="p-2 bg-slate-100 rounded-xl text-slate-900 border-2 border-slate-900 shadow-[2px_2px_0px_0px_rgba(15,23,42,1)] active:shadow-none active:translate-x-[1px] active:translate-y-[1px]">
           <ChevronLeft size={20} className="stroke-[3px]" />
         </button>
-        <div className="flex gap-4">
-          <Stat icon={<Clock size={16} className="text-rose-500 stroke-[3px]" />} label="Time" value={`${timeLeft}s`} />
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setTimerEnabled(!timerEnabled)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border-2 border-slate-900 font-black text-xs uppercase transition-all shadow-[2px_2px_0px_0px_rgba(15,23,42,1)] active:shadow-none active:translate-x-[1px] active:translate-y-[1px] ${
+              timerEnabled ? 'bg-rose-500 text-white' : 'bg-slate-200 text-slate-700'
+            }`}
+            title="Toggle Timer ON/OFF"
+          >
+            <Clock size={16} className="stroke-[3px]" />
+            <span>{timerEnabled ? `${timeLeft}s` : 'TIMER: OFF'}</span>
+          </button>
           <Stat icon={<Trophy size={16} className="text-amber-500 stroke-[3px]" />} label="Score" value={score} />
         </div>
       </header>
@@ -232,29 +273,43 @@ export default function Game({ setView, profile }: Props) {
         ))}
       </div>
 
-      <div className="grid grid-cols-2 gap-4 mt-auto">
+      <div className="grid grid-cols-2 gap-3 mt-auto">
         <ActionButton icon={<RotateCcw size={18} className="stroke-[3px]" />} label="UNDO" onClick={undo} disabled={history.length === 0} color="bg-white" />
         <ActionButton icon={<Lightbulb size={18} className="stroke-[3px]" />} label="HINT" onClick={() => alert(`Hint: ${solution}`)} color="bg-white" />
         <ActionButton icon={<SkipForward size={18} className="stroke-[3px]" />} label="SKIP" onClick={startNewPuzzle} color="bg-white" />
-        <ActionButton icon={<Hash size={18} className="stroke-[3px]" />} label="CUSTOM" onClick={setupCustomPuzzle} color="bg-white" />
+        {score > 0 ? (
+          <ActionButton icon={<Trophy size={18} className="stroke-[3px] text-amber-500" />} label="FINISH" onClick={handleGameOver} color="bg-amber-100 text-amber-900 border-amber-900" />
+        ) : (
+          <ActionButton icon={<Hash size={18} className="stroke-[3px]" />} label="CUSTOM" onClick={setupCustomPuzzle} color="bg-white" />
+        )}
       </div>
 
       {isGameOver && (
         <div className="fixed inset-0 bg-yellow-400/90 backdrop-blur-sm z-50 flex items-center justify-center p-8">
-          <div className="bg-white border-8 border-slate-900 p-10 rounded-[40px] w-full text-center shadow-[16px_16px_0px_0px_rgba(15,23,42,1)]">
-            <Trophy size={80} className="text-amber-500 mx-auto mb-6 drop-shadow-[4px_4px_0px_rgba(15,23,42,1)]" />
-            <h2 className="text-5xl font-black text-slate-900 mb-2 italic tracking-tighter uppercase">TIME OVER!</h2>
-            <p className="text-lg font-bold text-slate-500 uppercase tracking-widest mb-10">Score: {score}</p>
-            <div className="space-y-4">
+          <div className="bg-white border-8 border-slate-900 p-8 rounded-[40px] w-full text-center shadow-[16px_16px_0px_0px_rgba(15,23,42,1)]">
+            <Trophy size={80} className="text-amber-500 mx-auto mb-4 drop-shadow-[4px_4px_0px_rgba(15,23,42,1)]" />
+            <h2 className="text-4xl font-black text-slate-900 mb-2 italic tracking-tighter uppercase">
+              {timerEnabled ? 'TIME OVER!' : 'GAME FINISHED!'}
+            </h2>
+            <p className="text-sm font-bold text-slate-500 uppercase tracking-widest mb-8">
+              FINAL SCORE: <span className="text-indigo-600 font-black text-xl">{score}</span>
+            </p>
+            <div className="space-y-3">
               <button 
                 onClick={() => { setIsGameOver(false); setScore(0); setTimeLeft(60); startNewPuzzle(); }}
-                className="w-full bg-indigo-600 text-white font-black py-5 rounded-2xl border-4 border-slate-900 shadow-[6px_6px_0px_0px_rgba(15,23,42,1)] active:shadow-none active:translate-x-[6px] active:translate-y-[6px] text-xl uppercase tracking-widest italic"
+                className="w-full bg-indigo-600 text-white font-black py-4 rounded-2xl border-4 border-slate-900 shadow-[6px_6px_0px_0px_rgba(15,23,42,1)] active:shadow-none active:translate-x-[6px] active:translate-y-[6px] text-lg uppercase tracking-widest italic"
               >
                 PLAY AGAIN
               </button>
               <button 
+                onClick={() => setView('leaderboard')}
+                className="w-full bg-amber-400 text-slate-900 font-black py-4 rounded-2xl border-4 border-slate-900 shadow-[6px_6px_0px_0px_rgba(15,23,42,1)] active:shadow-none active:translate-x-[6px] active:translate-y-[6px] text-lg uppercase tracking-widest"
+              >
+                VIEW LEADERBOARD
+              </button>
+              <button 
                 onClick={() => setView('menu')}
-                className="w-full bg-white text-slate-900 font-black py-5 rounded-2xl border-4 border-slate-900 shadow-[6px_6px_0px_0px_rgba(15,23,42,1)] active:shadow-none active:translate-x-[6px] active:translate-y-[6px] text-xl uppercase tracking-widest"
+                className="w-full bg-white text-slate-900 font-black py-4 rounded-2xl border-4 border-slate-900 shadow-[6px_6px_0px_0px_rgba(15,23,42,1)] active:shadow-none active:translate-x-[6px] active:translate-y-[6px] text-base uppercase tracking-widest"
               >
                 MAIN MENU
               </button>
