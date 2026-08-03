@@ -96,7 +96,16 @@ export default function App() {
   }
 
   if (!profile) {
-    return <Auth onLogin={handleLogin} />;
+    if (view === 'admin') {
+      return (
+        <div className="min-h-screen bg-yellow-400 text-slate-900 font-sans selection:bg-indigo-600 selection:text-white">
+          <div className="max-w-md mx-auto min-h-screen flex flex-col">
+            <Admin setView={setView} />
+          </div>
+        </div>
+      );
+    }
+    return <Auth onLogin={handleLogin} onOpenAdmin={() => setView('admin')} />;
   }
 
   return (

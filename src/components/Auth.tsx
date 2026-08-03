@@ -14,9 +14,10 @@ import AppLogo from './AppLogo';
 
 interface Props {
   onLogin?: (profile: UserProfile) => void;
+  onOpenAdmin?: () => void;
 }
 
-export default function Auth({ onLogin }: Props) {
+export default function Auth({ onLogin, onOpenAdmin }: Props) {
   const [username, setUsername] = useState('');
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -142,7 +143,11 @@ export default function Auth({ onLogin }: Props) {
         className="w-full max-w-sm"
       >
         <div className="flex justify-center mb-8">
-          <AppLogo size="lg" />
+          <AppLogo 
+            size="lg" 
+            onClick={onOpenAdmin} 
+            title="คลิกที่โลโก้เพื่อเข้าสู่หน้า Admin" 
+          />
         </div>
         <h1 className="text-5xl font-black text-slate-900 mb-2 tracking-tighter italic uppercase leading-none">
           MATH<span className="text-rose-500">24</span>
@@ -190,10 +195,6 @@ export default function Auth({ onLogin }: Props) {
             )}
           </button>
         </form>
-        
-        <div className="mt-12 text-[10px] text-slate-900 uppercase font-black tracking-widest opacity-30 max-w-[280px] mx-auto">
-          No Password Required • Enter Unique Name
-        </div>
       </motion.div>
     </div>
   );

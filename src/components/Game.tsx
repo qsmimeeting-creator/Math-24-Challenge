@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, FormEvent } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ChevronLeft, RotateCcw, Lightbulb, SkipForward, Clock, Trophy, Flame, Hash, CheckCircle } from 'lucide-react';
 import { Math24Solver } from '../utils/math24';
@@ -34,6 +34,10 @@ export default function Game({ setView, profile }: Props) {
   const [timeLeft, setTimeLeft] = useState(60);
   const [isGameOver, setIsGameOver] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [showHintModal, setShowHintModal] = useState(false);
+  const [showCustomModal, setShowCustomModal] = useState(false);
+  const [customInputVal, setCustomInputVal] = useState('');
+  const [customError, setCustomError] = useState<string | null>(null);
   const [message, setMessage] = useState('FIRST NUMBER');
   const [solution, setSolution] = useState<string | null>(null);
 
@@ -58,22 +62,23 @@ export default function Game({ setView, profile }: Props) {
     resetBoard(numbers);
   };
 
-  const setupCustomPuzzle = () => {
-    const input = window.prompt('Enter 4 numbers (e.g. 3,8,3,1)');
-    if (input) {
-      const nums = input.split(',').map(n => parseInt(n.trim())).filter(n => !isNaN(n) && n >= 1 && n <= 9);
-      if (nums.length === 4) {
-        const solutions = Math24Solver.solve(nums);
-        if (solutions.length > 0) {
-          setInitialNums(nums);
-          setSolution(solutions[0]);
-          resetBoard(nums);
-        } else {
-          alert('No solution found for these numbers.');
-        }
+  const handleCustomSubmit = (e?: FormEvent) => {
+    if (e) e.preventDefault();
+    setCustomError(null);
+    const nums = customInputVal.split(',').map(n => parseInt(n.trim())).filter(n => !isNaN(n) && n >= 1 && n <= 9);
+    if (nums.length === 4) {
+      const solutions = Math24Solver.solve(nums);
+      if (solutions.length > 0) {
+        setInitialNums(nums);
+        setSolution(solutions[0]);
+        resetBoard(nums);
+        setShowCustomModal(false);
+        setCustomInputVal('');
       } else {
-        alert('Please enter 4 numbers between 1-9.');
+        setCustomError('ไม่พบวิธีคิดให้ได้ 24 จากตัวเลขชุดนี้');
       }
+    } else {
+      setCustomError('กรุณากรอกตัวเลข 4 ตัว ระหว่าง 1-9 (เช่น 3,8,3,1)');
     }
   };
 
@@ -273,14 +278,96 @@ export default function Game({ setView, profile }: Props) {
 
       <div className="grid grid-cols-2 gap-3 mt-auto">
         <ActionButton icon={<RotateCcw size={18} className="stroke-[3px]" />} label="UNDO" onClick={undo} disabled={history.length === 0} color="bg-white" />
-        <ActionButton icon={<Lightbulb size={18} className="stroke-[3px]" />} label="HINT" onClick={() => alert(`Hint: ${solution}`)} color="bg-white" />
+        <ActionButton icon={<Lightbulb size={18} className="stroke-[3px]" />} label="HINT" onClick={() => setShowHintModal(true)} color="bg-white" />
         <ActionButton icon={<SkipForward size={18} className="stroke-[3px]" />} label="SKIP" onClick={startNewPuzzle} color="bg-white" />
         {score > 0 ? (
           <ActionButton icon={<Trophy size={18} className="stroke-[3px] text-amber-500" />} label="FINISH" onClick={handleGameOver} color="bg-amber-100 text-amber-900 border-amber-900" />
         ) : (
-          <ActionButton icon={<Hash size={18} className="stroke-[3px]" />} label="CUSTOM" onClick={setupCustomPuzzle} color="bg-white" />
+          <ActionButton icon={<Hash size={18} className="stroke-[3px]" />} label="CUSTOM" onClick={() => { setShowCustomModal(true); setCustomError(null); setCustomInputVal(''); }} color="bg-white" />
         )}
       </div>
+
+      {showHintModal && (
+        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-50 flex items-center justify-center p-6">
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-white border-8 border-slate-900 p-6 rounded-[36px] w-full max-w-sm text-center shadow-[16px_16px_0px_0px_rgba(15,23,42,1)]"
+          >
+            <div className="w-16 h-16 bg-amber-400 border-4 border-slate-900 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-[4px_4px_0px_0px_rgba(15,23,42,1)]">
+              <Lightbulb size={36} className="text-slate-900 stroke-[2.5px]" />
+            </div>
+            <h2 className="text-2xl font-black text-slate-900 mb-1 italic tracking-tighter uppercase">คำใบ้ (HINT)</h2>
+            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4">แนวทางในการคิดให้ได้ 24</p>
+            
+            <div className="bg-amber-50 border-4 border-slate-900 p-4 rounded-2xl mb-6 shadow-[4px_4px_0px_0px_rgba(15,23,42,1)]">
+              <span className="text-xl font-black text-indigo-600 font-mono italic break-all">
+                {solution ? `Hint: ${solution}` : 'ไม่พบเฉลย'}
+              </span>
+            </div>
+
+            <button
+              onClick={() => setShowHintModal(false)}
+              className="w-full bg-slate-900 text-white font-black py-3.5 rounded-2xl border-4 border-slate-900 shadow-[4px_4px_0px_0px_rgba(15,23,42,1)] active:shadow-none active:translate-x-[4px] active:translate-y-[4px] text-base uppercase tracking-widest italic"
+            >
+              เข้าใจแล้ว (OK)
+            </button>
+          </motion.div>
+        </div>
+      )}
+
+      {showCustomModal && (
+        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-50 flex items-center justify-center p-6">
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-white border-8 border-slate-900 p-6 rounded-[36px] w-full max-w-sm text-center shadow-[16px_16px_0px_0px_rgba(15,23,42,1)]"
+          >
+            <div className="w-16 h-16 bg-indigo-500 border-4 border-slate-900 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-[4px_4px_0px_0px_rgba(15,23,42,1)]">
+              <Hash size={36} className="text-white stroke-[2.5px]" />
+            </div>
+            <h2 className="text-2xl font-black text-slate-900 mb-1 italic tracking-tighter uppercase">กำหนดโจทย์เอง</h2>
+            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4">กรอกตัวเลข 4 ตัว (1-9)</p>
+
+            {customError && (
+              <div className="mb-4 p-3 bg-rose-500 text-white border-3 border-slate-900 rounded-xl text-xs font-black uppercase text-left shadow-[2px_2px_0px_0px_rgba(15,23,42,1)]">
+                {customError}
+              </div>
+            )}
+
+            <form onSubmit={handleCustomSubmit} className="space-y-4">
+              <input
+                type="text"
+                autoFocus
+                value={customInputVal}
+                onChange={(e) => setCustomInputVal(e.target.value)}
+                placeholder="เช่น 3, 8, 3, 1"
+                className="w-full bg-slate-100 border-4 border-slate-900 p-4 rounded-2xl text-center font-black text-xl text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-indigo-600 shadow-[4px_4px_0px_0px_rgba(15,23,42,1)]"
+              />
+
+              <div className="grid grid-cols-2 gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowCustomModal(false);
+                    setCustomError(null);
+                    setCustomInputVal('');
+                  }}
+                  className="w-full bg-slate-200 text-slate-800 font-black py-3 rounded-xl border-3 border-slate-900 shadow-[3px_3px_0px_0px_rgba(15,23,42,1)] active:shadow-none active:translate-x-[3px] active:translate-y-[3px] text-sm uppercase tracking-wider"
+                >
+                  ยกเลิก
+                </button>
+                <button
+                  type="submit"
+                  className="w-full bg-indigo-600 text-white font-black py-3 rounded-xl border-3 border-slate-900 shadow-[3px_3px_0px_0px_rgba(15,23,42,1)] active:shadow-none active:translate-x-[3px] active:translate-y-[3px] text-sm uppercase tracking-wider italic"
+                >
+                  ตกลง
+                </button>
+              </div>
+            </form>
+          </motion.div>
+        </div>
+      )}
 
       {showSuccessModal && (
         <div className="fixed inset-0 bg-emerald-500/90 backdrop-blur-sm z-50 flex items-center justify-center p-6">

@@ -33,14 +33,6 @@ export default function Menu({ setView, profile, onLogout }: Props) {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => setView('admin')}
-            className="flex items-center gap-1 px-3 py-2 bg-slate-900 text-yellow-400 rounded-xl border-2 border-slate-900 shadow-[2px_2px_0px_0px_rgba(15,23,42,1)] active:shadow-none active:translate-x-[1px] active:translate-y-[1px] font-black text-xs uppercase"
-            title="เข้าสู่หน้า Admin"
-          >
-            <ShieldAlert size={16} />
-            <span>ADMIN</span>
-          </button>
           <button 
             onClick={() => {
               if (onLogout) {
