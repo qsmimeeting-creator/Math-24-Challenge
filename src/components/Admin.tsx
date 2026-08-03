@@ -268,8 +268,7 @@ export default function Admin({ setView }: Props) {
           <div className="w-16 h-16 bg-rose-500 text-white rounded-2xl border-4 border-slate-900 flex items-center justify-center mx-auto mb-4 shadow-[3px_3px_0px_0px_rgba(15,23,42,1)]">
             <Lock size={32} className="stroke-[3px]" />
           </div>
-          <h2 className="text-2xl font-black text-slate-900 mb-1 italic uppercase">ADMIN PANEL</h2>
-          <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-6">กรอกรหัสผ่านผู้ดูแลระบบ (Default: 1234)</p>
+          <h2 className="text-2xl font-black text-slate-900 mb-6 italic uppercase">ADMIN PANEL</h2>
 
           <form onSubmit={handleLogin} className="space-y-4">
             <input
