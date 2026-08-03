@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { db } from '../lib/firebase';
 import { doc, setDoc, getDoc, updateDoc, onSnapshot, collection, getDocs, query, limit } from 'firebase/firestore';
 import { UserProfile, Room, Player } from '../types';
@@ -40,6 +40,7 @@ export default function Multiplayer({ setView, profile }: Props) {
   const [gameMessage, setGameMessage] = useState('FIRST NUMBER');
   const [solvedNotice, setSolvedNotice] = useState<string | null>(null);
   const [timeLeft, setTimeLeft] = useState<number>(60);
+  const hostClockSkewRef = useRef<number>(0);
 
   const username = profile?.username || 'PLAYER';
   const userId = profile?.uid || `guest_${Math.random().toString(36).substring(2, 8)}`;
@@ -80,6 +81,15 @@ export default function Multiplayer({ setView, profile }: Props) {
         if (data.timeLimit) {
           setSelectedTimeLimit(data.timeLimit);
         }
+
+        // Calculate host clock skew (difference between client system clock and room creation time)
+        if (data.createdAt) {
+          if (data.hostId === userId) {
+            hostClockSkewRef.current = 0;
+          } else if (hostClockSkewRef.current === 0) {
+            hostClockSkewRef.current = Date.now() - data.createdAt;
+          }
+        }
       } else {
         setErrorMsg('Room was closed or does not exist.');
         setStatus('lobby');
@@ -90,7 +100,7 @@ export default function Multiplayer({ setView, profile }: Props) {
     });
 
     return () => unsubscribe();
-  }, [currentRoomId]);
+  }, [currentRoomId, userId]);
 
   // Sync initial board cards when game starts
   useEffect(() => {
@@ -115,7 +125,8 @@ export default function Multiplayer({ setView, profile }: Props) {
     const limitSecs = room.timeLimit || selectedTimeLimit || 60;
 
     const updateTimer = () => {
-      const elapsed = Math.floor((Date.now() - room.gameStartTime!) / 1000);
+      const adjustedNow = Date.now() - hostClockSkewRef.current;
+      const elapsed = Math.floor((adjustedNow - room.gameStartTime!) / 1000);
       const remaining = Math.max(0, limitSecs - elapsed);
       setTimeLeft(remaining);
 
