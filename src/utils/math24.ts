@@ -49,15 +49,22 @@ export class Math24Solver {
   }
 
   static generateSolvable(difficulty: number = 1): { numbers: number[]; solutions: string[] } {
-    // Basic difficulty: just ensure it's solvable
-    // More difficulty could mean fewer solutions or more complex steps
-    while (true) {
+    const defaultSolvables = [
+      [1, 3, 4, 6], [2, 3, 4, 8], [3, 3, 8, 8], [1, 5, 5, 5], [4, 4, 10, 10],
+      [1, 2, 3, 4], [2, 3, 5, 7], [1, 4, 5, 6], [3, 4, 6, 8], [2, 4, 6, 8],
+      [1, 1, 5, 8], [2, 2, 8, 8], [3, 5, 7, 9], [4, 6, 8, 9], [1, 7, 8, 9]
+    ];
+
+    for (let attempts = 0; attempts < 30; attempts++) {
       const nums = Array.from({ length: 4 }, () => Math.floor(Math.random() * 9) + 1);
       const solutions = this.solve(nums);
       if (solutions.length > 0) {
         return { numbers: nums, solutions };
       }
     }
+
+    const fallback = defaultSolvables[Math.floor(Math.random() * defaultSolvables.length)];
+    return { numbers: fallback, solutions: this.solve(fallback) };
   }
 
   static validate(numbers: number[], expression: string): boolean {

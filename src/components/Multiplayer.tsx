@@ -100,10 +100,22 @@ export default function Multiplayer({ setView, profile }: Props) {
     return () => unsubscribe();
   }, [currentRoomId]);
 
+  const [copiedCode, setCopiedCode] = useState(false);
+
+  const copyRoomCode = () => {
+    if (room?.id) {
+      navigator.clipboard.writeText(room.id);
+      setCopiedCode(true);
+      setTimeout(() => setCopiedCode(false), 2000);
+    }
+  };
+
   const createRoom = async () => {
     setLoading(true);
     setErrorMsg(null);
-    const code = roomIdInput.trim() ? roomIdInput.trim().toUpperCase() : `M24-${Math.floor(1000 + Math.random() * 9000)}`;
+    const code = roomIdInput.trim() 
+      ? roomIdInput.trim().toUpperCase() 
+      : `M24-${Math.floor(1000 + Math.random() * 9000)}`;
     const puzzle = Math24Solver.generateSolvable();
 
     const newRoom: Room = {
@@ -124,21 +136,27 @@ export default function Multiplayer({ setView, profile }: Props) {
       createdAt: Date.now()
     };
 
+    // Optimistically transition to room view immediately
+    setRoom(newRoom);
+    setCurrentRoomId(code);
+    setStatus('room');
+    setLoading(false);
+
+    // Save room in Firestore asynchronously
     try {
       await setDoc(doc(db, 'rooms', code), newRoom);
-      setCurrentRoomId(code);
-      setStatus('room');
     } catch (e: any) {
-      console.error('Error creating room:', e);
-      setErrorMsg('Failed to create room on server.');
-    } finally {
-      setLoading(false);
+      console.error('Error creating room on Firestore:', e);
+      setErrorMsg('ไม่สามารถบันทึกห้องบนเซิร์ฟเวอร์ได้ (ลองตรวจสอบอินเทอร์เน็ต)');
     }
   };
 
   const joinRoom = async (codeToJoin?: string) => {
     const code = (codeToJoin || roomIdInput).trim().toUpperCase();
-    if (!code) return;
+    if (!code) {
+      setErrorMsg('กรุณากรอกรหัสห้อง (Room Code)');
+      return;
+    }
 
     setLoading(true);
     setErrorMsg(null);
@@ -148,7 +166,7 @@ export default function Multiplayer({ setView, profile }: Props) {
       const docSnap = await getDoc(roomRef);
 
       if (!docSnap.exists()) {
-        setErrorMsg(`Room "${code}" not found.`);
+        setErrorMsg(`ไม่พบห้องรหัส "${code}" กรุณาตรวจสอบรหัสห้องอีกครั้ง`);
         setLoading(false);
         return;
       }
@@ -168,11 +186,12 @@ export default function Multiplayer({ setView, profile }: Props) {
         await updateDoc(roomRef, { players: updatedPlayers });
       }
 
+      setRoom(existingRoom);
       setCurrentRoomId(code);
       setStatus('room');
     } catch (e: any) {
       console.error('Error joining room:', e);
-      setErrorMsg('Could not join room. Please check code.');
+      setErrorMsg('ไม่สามารถเข้าร่วมห้องได้ กรุณาลองใหม่อีกครั้ง');
     } finally {
       setLoading(false);
     }
@@ -188,7 +207,8 @@ export default function Multiplayer({ setView, profile }: Props) {
       return p;
     });
 
-    const allReady = updatedPlayers.length >= 1 && updatedPlayers.every(p => p.isReady);
+    const hasMinPlayers = updatedPlayers.length >= 2;
+    const allReady = hasMinPlayers && updatedPlayers.every(p => p.isReady);
     const newStatus = allReady ? 'playing' : 'waiting';
 
     try {
@@ -399,9 +419,18 @@ export default function Multiplayer({ setView, profile }: Props) {
           >
             {/* Header info */}
             <div className="flex items-center justify-between mb-4 p-4 bg-white rounded-2xl border-4 border-slate-900 shadow-[4px_4px_0px_0px_rgba(15,23,42,1)]">
-              <div>
-                <div className="text-[9px] text-slate-400 uppercase font-black tracking-widest">CODE:</div>
-                <div className="text-xl font-black text-indigo-600 italic tracking-wider">{room?.id}</div>
+              <div className="flex items-center gap-2">
+                <div>
+                  <div className="text-[9px] text-slate-400 uppercase font-black tracking-widest">CODE:</div>
+                  <div className="text-xl font-black text-indigo-600 italic tracking-wider">{room?.id}</div>
+                </div>
+                <button 
+                  onClick={copyRoomCode} 
+                  className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-800 border-2 border-slate-900 rounded-lg text-[10px] font-black uppercase transition-all"
+                  title="Copy Room Code"
+                >
+                  {copiedCode ? 'คัดลอกแล้ว!' : 'คัดลอก'}
+                </button>
               </div>
               <div className={`px-4 py-1.5 text-xs font-black rounded-full border-2 border-slate-900 uppercase italic ${
                 room?.status === 'playing' ? 'bg-rose-500 text-white' : 'bg-emerald-400 text-slate-900'
@@ -412,7 +441,10 @@ export default function Multiplayer({ setView, profile }: Props) {
 
             {/* Players scoreboard */}
             <div className="bg-white border-4 border-slate-900 p-4 rounded-2xl shadow-[4px_4px_0px_0px_rgba(15,23,42,1)] mb-4">
-              <div className="text-[9px] font-black text-slate-400 uppercase mb-2 tracking-widest italic">PLAYERS ({room?.players.length || 0})</div>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest italic">PLAYERS ({room?.players.length || 0})</span>
+                <span className="text-[9px] font-black bg-amber-100 text-amber-800 px-2 py-0.5 rounded-md border border-amber-900 uppercase">ต้องการ 2+ คน</span>
+              </div>
               <div className="grid grid-cols-2 gap-2">
                 {room?.players.map((p) => (
                   <div key={p.uid} className="flex items-center justify-between p-2.5 bg-slate-50 border-2 border-slate-900 rounded-xl">
@@ -436,7 +468,13 @@ export default function Multiplayer({ setView, profile }: Props) {
               <div className="flex-1 flex flex-col items-center justify-center my-6 bg-white border-4 border-slate-900 p-6 rounded-3xl shadow-[6px_6px_0px_0px_rgba(15,23,42,1)] text-center">
                 <Users size={48} className="text-indigo-600 mb-3" />
                 <h3 className="text-xl font-black text-slate-900 mb-1 uppercase tracking-tight italic">WAITING FOR PLAYERS</h3>
-                <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-6">Share room code <span className="text-indigo-600 font-black">{room?.id}</span> with a friend</p>
+                <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-4">แชร์รหัสห้อง <span className="text-indigo-600 font-black">{room?.id}</span> ให้เพื่อนเข้าร่วม</p>
+
+                {(room?.players.length || 0) < 2 && (
+                  <p className="text-xs font-black text-amber-600 bg-amber-50 border-2 border-amber-300 px-4 py-2 rounded-xl mb-4 animate-pulse">
+                    ⚠️ ต้องมีผู้เล่นอย่างน้อย 2 คนขึ้นไปเพื่อเริ่มเกม
+                  </p>
+                )}
 
                 <button
                   onClick={toggleReady}
@@ -445,7 +483,7 @@ export default function Multiplayer({ setView, profile }: Props) {
                   }`}
                 >
                   <Play size={20} fill="currentColor" className="stroke-[3px]" />
-                  {myPlayerState?.isReady ? 'READY! WAITING OTHERS...' : 'CLICK TO READY'}
+                  {myPlayerState?.isReady ? 'พร้อมแล้ว! (รอผู้เล่นครบและพร้อม)' : 'กดพร้อมเล่น (READY)'}
                 </button>
               </div>
             ) : (

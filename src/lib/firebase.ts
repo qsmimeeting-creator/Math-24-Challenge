@@ -18,7 +18,10 @@ const firebaseConfig = {
   appId: "1:383359500107:web:6f1172d8b0adf4ae9072ce"
 };
 
+// Database ID for this AI Studio project
+const FIRESTORE_DB_ID = "ai-studio-0e597511-4fcc-418a-8f71-48de21db167e";
+
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
-export const db = getFirestore(app);
+export const db = getFirestore(app, FIRESTORE_DB_ID);
 export const googleProvider = new GoogleAuthProvider();
