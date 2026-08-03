@@ -19,21 +19,35 @@ export default function Leaderboard({ setView }: Props) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const fetchScores = async () => {
-      setLoading(true);
-      let list: ScoreEntry[] = [];
+    let isMounted = true;
 
-      // 1. Get local scores
-      try {
-        const local = localStorage.getItem('math24_leaderboard');
-        if (local) {
-          list = JSON.parse(local);
-        }
-      } catch (e) {
-        console.error('Failed to parse local scores', e);
+    // Load local scores immediately
+    let initialList: ScoreEntry[] = [];
+    try {
+      const local = localStorage.getItem('math24_leaderboard');
+      if (local) {
+        initialList = JSON.parse(local);
       }
+    } catch (e) {
+      console.error('Failed to parse local scores', e);
+    }
 
-      // 2. Fetch from Firestore
+    if (initialList.length > 0) {
+      initialList.sort((a, b) => b.score - a.score);
+      setScores(initialList.slice(0, 20));
+      setLoading(false);
+    }
+
+    // Safety timeout to turn off loading after 2 seconds
+    const timeoutTimer = setTimeout(() => {
+      if (isMounted) {
+        setLoading(false);
+      }
+    }, 2000);
+
+    const fetchScores = async () => {
+      let list = [...initialList];
+
       try {
         const q = query(collection(db, 'leaderboard'), orderBy('score', 'desc'), limit(20));
         const querySnapshot = await getDocs(q);
@@ -56,7 +70,7 @@ export default function Leaderboard({ setView }: Props) {
           } as ScoreEntry;
         });
 
-        // Merge local & firestore by unique key or id
+        // Merge local & firestore
         const mergedMap = new Map<string, ScoreEntry>();
         [...list, ...fsScores].forEach(item => {
           const key = item.id || `${item.username}-${item.score}-${item.timestamp}`;
@@ -66,26 +80,30 @@ export default function Leaderboard({ setView }: Props) {
         });
         list = Array.from(mergedMap.values());
       } catch (e) {
-        console.warn('Firestore leaderboard unavailable, using local scores', e);
+        console.warn('Firestore leaderboard query failed, using local fallback:', e);
       }
 
-      // Default sample scores if still empty
       if (list.length === 0) {
         list = [
-          { id: 'def-1', userId: 'd1', username: 'MATH_GENIUS', score: 500, time: 45, mode: 'time', timestamp: Date.now() - 86400000 },
-          { id: 'def-2', userId: 'd2', username: 'SPEED_CALC', score: 350, time: 50, mode: 'time', timestamp: Date.now() - 43200000 },
-          { id: 'def-3', userId: 'd3', username: 'NUMBER_PRO', score: 200, time: 60, mode: 'time', timestamp: Date.now() - 3600000 },
+          { id: 'def-1', userId: 'd1', username: 'MATH_GENIUS', score: 25, time: 45, mode: 'time', timestamp: Date.now() - 86400000 },
+          { id: 'def-2', userId: 'd2', username: 'SPEED_CALC', score: 18, time: 50, mode: 'time', timestamp: Date.now() - 43200000 },
+          { id: 'def-3', userId: 'd3', username: 'NUMBER_PRO', score: 12, time: 60, mode: 'time', timestamp: Date.now() - 3600000 },
         ];
-        localStorage.setItem('math24_leaderboard', JSON.stringify(list));
       }
 
-      // Sort descending by score
       list.sort((a, b) => b.score - a.score);
-      setScores(list.slice(0, 20));
-      setLoading(false);
+      if (isMounted) {
+        setScores(list.slice(0, 20));
+        setLoading(false);
+      }
     };
 
     fetchScores();
+
+    return () => {
+      isMounted = false;
+      clearTimeout(timeoutTimer);
+    };
   }, []);
 
   return (

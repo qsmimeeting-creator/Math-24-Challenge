@@ -5,7 +5,7 @@
 
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ChevronLeft, RotateCcw, Lightbulb, SkipForward, Clock, Trophy, Flame, Hash } from 'lucide-react';
+import { ChevronLeft, RotateCcw, Lightbulb, SkipForward, Clock, Trophy, Flame, Hash, CheckCircle } from 'lucide-react';
 import { Math24Solver } from '../utils/math24';
 import { UserProfile } from '../types';
 import { db } from '../lib/firebase';
@@ -33,6 +33,7 @@ export default function Game({ setView, profile }: Props) {
   const [timerEnabled, setTimerEnabled] = useState(true);
   const [timeLeft, setTimeLeft] = useState(60);
   const [isGameOver, setIsGameOver] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [message, setMessage] = useState('FIRST NUMBER');
   const [solution, setSolution] = useState<string | null>(null);
 
@@ -142,16 +143,13 @@ export default function Game({ setView, profile }: Props) {
   };
 
   const handleSuccess = async () => {
-    setScore(prev => prev + 100 + streak * 10);
+    setScore(prev => prev + 1);
     setStreak(prev => prev + 1);
     if (timerEnabled) {
       setTimeLeft(prev => prev + 15);
     }
     setMessage('SOLVED! PERFECT');
-    
-    setTimeout(() => {
-      startNewPuzzle();
-    }, 1000);
+    setShowSuccessModal(true);
   };
 
   const handleGameOver = async () => {
@@ -283,6 +281,31 @@ export default function Game({ setView, profile }: Props) {
           <ActionButton icon={<Hash size={18} className="stroke-[3px]" />} label="CUSTOM" onClick={setupCustomPuzzle} color="bg-white" />
         )}
       </div>
+
+      {showSuccessModal && (
+        <div className="fixed inset-0 bg-emerald-500/90 backdrop-blur-sm z-50 flex items-center justify-center p-6">
+          <div className="bg-white border-8 border-slate-900 p-8 rounded-[40px] w-full max-w-sm text-center shadow-[16px_16px_0px_0px_rgba(15,23,42,1)]">
+            <div className="w-20 h-20 bg-emerald-400 border-4 border-slate-900 rounded-3xl flex items-center justify-center mx-auto mb-4 shadow-[4px_4px_0px_0px_rgba(15,23,42,1)]">
+              <CheckCircle size={48} className="text-slate-900 stroke-[3px]" />
+            </div>
+            <h2 className="text-3xl font-black text-slate-900 mb-1 italic tracking-tighter uppercase">คำตอบถูกต้อง!</h2>
+            <p className="text-sm font-black text-emerald-600 mb-4 uppercase tracking-wider">🎉 PERFECT 24! (+1 คะแนน)</p>
+            <div className="bg-slate-100 border-2 border-slate-900 p-3 rounded-2xl mb-6">
+              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">คะแนนสะสมปัจจุบัน</p>
+              <p className="text-3xl font-black text-indigo-600 italic">{score} คะแนน</p>
+            </div>
+            <button
+              onClick={() => {
+                setShowSuccessModal(false);
+                startNewPuzzle();
+              }}
+              className="w-full bg-indigo-600 text-white font-black py-4 rounded-2xl border-4 border-slate-900 shadow-[6px_6px_0px_0px_rgba(15,23,42,1)] active:shadow-none active:translate-x-[6px] active:translate-y-[6px] text-lg uppercase tracking-widest italic"
+            >
+              โจทย์ถัดไป (NEXT)
+            </button>
+          </div>
+        </div>
+      )}
 
       {isGameOver && (
         <div className="fixed inset-0 bg-yellow-400/90 backdrop-blur-sm z-50 flex items-center justify-center p-8">
