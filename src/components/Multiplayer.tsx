@@ -40,10 +40,12 @@ export default function Multiplayer({ setView, profile }: Props) {
   const [gameMessage, setGameMessage] = useState('FIRST NUMBER');
   const [solvedNotice, setSolvedNotice] = useState<string | null>(null);
   const [timeLeft, setTimeLeft] = useState<number>(60);
-  const hostClockSkewRef = useRef<number>(0);
-
   const username = profile?.username || 'PLAYER';
   const userId = profile?.uid || `guest_${Math.random().toString(36).substring(2, 8)}`;
+
+  const isHost = room 
+    ? (room.hostId ? room.hostId === userId : room.players?.[0]?.uid === userId) 
+    : false;
 
   // Fetch active rooms on lobby mount
   useEffect(() => {
@@ -81,15 +83,6 @@ export default function Multiplayer({ setView, profile }: Props) {
         if (data.timeLimit) {
           setSelectedTimeLimit(data.timeLimit);
         }
-
-        // Calculate host clock skew (difference between client system clock and room creation time)
-        if (data.createdAt) {
-          if (data.hostId === userId) {
-            hostClockSkewRef.current = 0;
-          } else if (hostClockSkewRef.current === 0) {
-            hostClockSkewRef.current = Date.now() - data.createdAt;
-          }
-        }
       } else {
         setErrorMsg('Room was closed or does not exist.');
         setStatus('lobby');
@@ -100,7 +93,7 @@ export default function Multiplayer({ setView, profile }: Props) {
     });
 
     return () => unsubscribe();
-  }, [currentRoomId, userId]);
+  }, [currentRoomId]);
 
   // Sync initial board cards when game starts
   useEffect(() => {
@@ -120,29 +113,36 @@ export default function Multiplayer({ setView, profile }: Props) {
 
   // Countdown timer effect during 'playing' state
   useEffect(() => {
-    if (room?.status !== 'playing' || !room.gameStartTime) return;
+    if (room?.status !== 'playing' || !room.gameStartTime || !currentRoomId) return;
 
     const limitSecs = room.timeLimit || selectedTimeLimit || 60;
+    const storageKey = `game_start_time_${currentRoomId}_${room.gameStartTime}`;
+
+    let localStartMs = sessionStorage.getItem(storageKey);
+    if (!localStartMs) {
+      localStartMs = Date.now().toString();
+      sessionStorage.setItem(storageKey, localStartMs);
+    }
+    const localStart = Number(localStartMs);
 
     const updateTimer = () => {
-      const adjustedNow = Date.now() - hostClockSkewRef.current;
-      const elapsed = Math.floor((adjustedNow - room.gameStartTime!) / 1000);
+      const elapsed = Math.floor((Date.now() - localStart) / 1000);
       const remaining = Math.max(0, limitSecs - elapsed);
       setTimeLeft(remaining);
 
-      if (remaining <= 0 && room.status === 'playing') {
-        // Mark room as finished
-        updateDoc(doc(db, 'rooms', currentRoomId!), {
+      if (remaining <= 0 && room.status === 'playing' && isHost) {
+        // Host marks room as finished
+        updateDoc(doc(db, 'rooms', currentRoomId), {
           status: 'finished'
         }).catch(console.error);
       }
     };
 
     updateTimer();
-    const timerInterval = setInterval(updateTimer, 500);
+    const timerInterval = setInterval(updateTimer, 200);
 
     return () => clearInterval(timerInterval);
-  }, [room?.status, room?.gameStartTime, room?.timeLimit, currentRoomId, selectedTimeLimit]);
+  }, [room?.status, room?.gameStartTime, room?.timeLimit, currentRoomId, selectedTimeLimit, isHost]);
 
   const [copiedCode, setCopiedCode] = useState(false);
 
@@ -242,10 +242,6 @@ export default function Multiplayer({ setView, profile }: Props) {
     }
   };
 
-  const isHost = room 
-    ? (room.hostId ? room.hostId === userId : room.players?.[0]?.uid === userId) 
-    : false;
-
   const changeTimeLimit = async (newLimit: number) => {
     setSelectedTimeLimit(newLimit);
     if (currentRoomId && room) {
@@ -263,6 +259,12 @@ export default function Multiplayer({ setView, profile }: Props) {
     if (!currentRoomId || !room) return;
     if (room.players.length < 2) {
       setErrorMsg('ต้องมีผู้เล่นอย่างน้อย 2 คนเพื่อเริ่มเกม');
+      return;
+    }
+
+    const allReady = room.players.every(p => p.isReady);
+    if (!allReady) {
+      setErrorMsg('ผู้เล่นทุกคนต้องกดพร้อมเล่น (READY) ก่อนเริ่มเกม');
       return;
     }
 
@@ -696,6 +698,32 @@ export default function Multiplayer({ setView, profile }: Props) {
                     แชร์รหัสห้อง <span className="text-indigo-600 font-black">{room?.id}</span> ให้เพื่อนเข้าร่วม
                   </p>
 
+                  {/* Players list with ready status */}
+                  <div className="bg-slate-50 border-3 border-slate-900 p-3 rounded-2xl mb-3 text-left">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-black text-slate-900 uppercase italic flex items-center gap-1.5">
+                        <Users size={14} className="text-indigo-600 stroke-[3px]" />
+                        รายชื่อผู้เล่น ({room?.players.length || 0}):
+                      </span>
+                    </div>
+                    <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
+                      {room?.players.map((p) => (
+                        <div key={p.uid} className="flex items-center justify-between bg-white border-2 border-slate-900 px-3 py-1.5 rounded-xl">
+                          <span className="text-xs font-black text-slate-900 truncate flex items-center gap-1">
+                            {p.username} {p.uid === room.hostId ? '👑' : ''} {p.uid === userId ? '(คุณ)' : ''}
+                          </span>
+                          <span className={`text-[10px] font-black px-2 py-0.5 rounded-md border italic ${
+                            p.isReady
+                              ? 'bg-emerald-100 text-emerald-800 border-emerald-400'
+                              : 'bg-amber-50 text-amber-700 border-amber-300'
+                          }`}>
+                            {p.isReady ? 'พร้อมแล้ว ✓' : 'ยังไม่พร้อม ⏳'}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
                   {/* Time Limit Settings in Waiting Room */}
                   <div className="bg-slate-50 border-3 border-slate-900 p-3 rounded-2xl mb-3 text-left">
                     <div className="flex items-center justify-between mb-1.5">
@@ -731,9 +759,17 @@ export default function Multiplayer({ setView, profile }: Props) {
                     )}
                   </div>
 
-                  {(room?.players.length || 0) < 2 && (
+                  {(room?.players.length || 0) < 2 ? (
                     <div className="text-xs font-black text-amber-800 bg-amber-50 border-2 border-amber-400 p-2.5 rounded-xl mb-3 animate-pulse">
                       ⚠️ ต้องมีผู้เล่นอย่างน้อย 2 คนขึ้นไปเพื่อเริ่มเกม
+                    </div>
+                  ) : !room?.players.every(p => p.isReady) ? (
+                    <div className="text-xs font-black text-amber-800 bg-amber-50 border-2 border-amber-400 p-2.5 rounded-xl mb-3">
+                      ⏳ รอผู้เล่นทุกคนกด "พร้อมเล่นแล้ว" (READY) ก่อนเริ่มเกม
+                    </div>
+                  ) : (
+                    <div className="text-xs font-black text-emerald-800 bg-emerald-50 border-2 border-emerald-400 p-2.5 rounded-xl mb-3">
+                      ✅ ทุกคนพร้อมเล่นแล้ว! กดเริ่มเกมส์ได้เลย
                     </div>
                   )}
                 </div>
@@ -747,14 +783,14 @@ export default function Multiplayer({ setView, profile }: Props) {
                     }`}
                   >
                     <CheckCircle size={18} className="stroke-[3px]" />
-                    {myPlayerState?.isReady ? 'สถานะ: พร้อมเล่นแล้ว ✓' : 'สถานะ: กดเพื่อเตรียมพร้อม (READY)'}
+                    {myPlayerState?.isReady ? 'สถานะ: พร้อมเล่นแล้ว ✓' : 'กดปุ่มเพื่อเตรียมพร้อม (READY)'}
                   </button>
 
                   {/* Start Game Button (Host Only) */}
                   {isHost ? (
                     <button
                       onClick={startGameByHost}
-                      disabled={(room?.players.length || 0) < 2}
+                      disabled={(room?.players.length || 0) < 2 || !room?.players.every(p => p.isReady)}
                       className="w-full flex items-center justify-center gap-2 font-black py-3.5 rounded-2xl border-4 border-slate-900 bg-indigo-600 text-white shadow-[4px_4px_0px_0px_rgba(15,23,42,1)] active:shadow-none active:translate-x-[3px] active:translate-y-[3px] uppercase tracking-wider italic text-base disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       <Play size={20} fill="currentColor" className="stroke-[3px]" />
