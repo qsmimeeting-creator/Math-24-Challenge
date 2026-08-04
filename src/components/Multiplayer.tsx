@@ -514,6 +514,21 @@ export default function Multiplayer({ setView, profile }: Props) {
   const myPlayerState = room?.players.find(p => p.uid === userId);
   const sortedPlayers = room?.players ? [...room.players].sort((a, b) => b.score - a.score) : [];
 
+  // Compute tied ranks (standard competition ranking: 1, 1, 3...)
+  const playerRanks: { [uid: string]: number } = {};
+  if (sortedPlayers.length > 0) {
+    let currentRank = 1;
+    sortedPlayers.forEach((p, idx) => {
+      if (idx > 0 && p.score < sortedPlayers[idx - 1].score) {
+        currentRank = idx + 1;
+      }
+      playerRanks[p.uid] = currentRank;
+    });
+  }
+
+  const topScore = sortedPlayers.length > 0 ? sortedPlayers[0].score : 0;
+  const topWinners = sortedPlayers.filter(p => p.score === topScore);
+
   return (
     <div className="flex-1 flex flex-col p-6">
       <header className="flex items-center justify-between mb-6 bg-white p-4 rounded-2xl border-4 border-slate-900 shadow-[4px_4px_0px_0px_rgba(15,23,42,1)]">
@@ -753,26 +768,31 @@ export default function Multiplayer({ setView, profile }: Props) {
                   {/* Top Winner Card */}
                   {sortedPlayers.length > 0 && (
                     <div className="bg-amber-100 border-4 border-slate-900 p-4 rounded-2xl mb-4 shadow-[4px_4px_0px_0px_rgba(15,23,42,1)] flex items-center gap-3">
-                      <div className="w-12 h-12 bg-amber-400 border-3 border-slate-900 rounded-xl flex items-center justify-center font-black text-2xl text-slate-900 italic shadow-[2px_2px_0px_0px_rgba(15,23,42,1)]">
+                      <div className="w-12 h-12 bg-amber-400 border-3 border-slate-900 rounded-xl flex items-center justify-center font-black text-2xl text-slate-900 italic shadow-[2px_2px_0px_0px_rgba(15,23,42,1)] shrink-0">
                         🏆
                       </div>
-                      <div className="text-left truncate">
-                        <div className="text-[10px] font-black text-amber-800 uppercase tracking-widest">ผู้ชนะเลิศ (WINNER)</div>
-                        <div className="text-lg font-black text-slate-900 uppercase italic truncate">{sortedPlayers[0].username}</div>
-                        <div className="text-sm font-black text-indigo-600 italic">{sortedPlayers[0].score} PTS</div>
+                      <div className="text-left truncate flex-1">
+                        <div className="text-[10px] font-black text-amber-800 uppercase tracking-widest">
+                          {topWinners.length > 1 ? 'ผู้ชนะเลิศร่วม (CO-WINNERS)' : 'ผู้ชนะเลิศ (WINNER)'}
+                        </div>
+                        <div className="text-lg font-black text-slate-900 uppercase italic truncate">
+                          {topWinners.map(w => w.username).join(', ')}
+                        </div>
+                        <div className="text-sm font-black text-indigo-600 italic">{topScore} PTS</div>
                       </div>
                     </div>
                   )}
 
                   {/* All players list */}
                   <div className="space-y-2 mb-4">
-                    {sortedPlayers.map((p, idx) => {
-                      const badgeBg = idx === 0 ? 'bg-amber-400 text-slate-900' : idx === 1 ? 'bg-slate-300 text-slate-900' : idx === 2 ? 'bg-amber-700 text-white' : 'bg-slate-100 text-slate-800';
+                    {sortedPlayers.map((p) => {
+                      const rank = playerRanks[p.uid] || 1;
+                      const badgeBg = rank === 1 ? 'bg-amber-400 text-slate-900' : rank === 2 ? 'bg-slate-300 text-slate-900' : rank === 3 ? 'bg-amber-700 text-white' : 'bg-slate-100 text-slate-800';
                       return (
                         <div key={p.uid} className="flex items-center justify-between p-2.5 bg-slate-50 border-2 border-slate-900 rounded-xl">
                           <div className="flex items-center gap-2 truncate">
                             <span className={`w-7 h-7 rounded-lg border-2 border-slate-900 flex items-center justify-center font-black text-xs italic ${badgeBg}`}>
-                              #{idx + 1}
+                              #{rank}
                             </span>
                             <span className="font-black text-slate-900 text-sm uppercase italic truncate">
                               {p.username} {p.uid === userId ? '(คุณ)' : ''}

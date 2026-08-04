@@ -129,41 +129,53 @@ export default function Leaderboard({ setView }: Props) {
             <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">มาร่วมเป็นคนแรกที่เล่นและบันทึกคะแนน!</p>
           </div>
         ) : (
-          scores.map((score, index) => {
-            const isTop3 = index < 3;
-            const badgeBg = index === 0 ? 'bg-amber-400 text-slate-900' : index === 1 ? 'bg-slate-300 text-slate-900' : index === 2 ? 'bg-amber-700 text-white' : 'bg-slate-100 text-slate-800';
+          (() => {
+            let currentRank = 1;
+            const scoreRanks: number[] = [];
+            scores.forEach((s, i) => {
+              if (i > 0 && s.score < scores[i - 1].score) {
+                currentRank = i + 1;
+              }
+              scoreRanks.push(currentRank);
+            });
 
-            return (
-              <motion.div
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: Math.min(index * 0.03, 0.3) }}
-                key={score.id || `${score.username}-${index}`}
-                className={`flex items-center gap-3 p-3.5 bg-white border-4 border-slate-900 rounded-2xl shadow-[4px_4px_0px_0px_rgba(15,23,42,1)] ${isTop3 ? 'ring-2 ring-indigo-500/20' : ''}`}
-              >
-                <div className={`w-9 h-9 rounded-xl border-2 border-slate-900 flex items-center justify-center font-black text-sm italic ${badgeBg} shadow-[2px_2px_0px_0px_rgba(15,23,42,1)]`}>
-                  {index + 1}
-                </div>
+            return scores.map((score, index) => {
+              const rank = scoreRanks[index];
+              const isTop3 = rank <= 3;
+              const badgeBg = rank === 1 ? 'bg-amber-400 text-slate-900' : rank === 2 ? 'bg-slate-300 text-slate-900' : rank === 3 ? 'bg-amber-700 text-white' : 'bg-slate-100 text-slate-800';
 
-                <div className="flex-1 truncate">
-                  <div className="flex items-center gap-2">
-                    <h3 className="font-black text-slate-900 text-sm uppercase tracking-tight italic truncate">
-                      {score.username}
-                    </h3>
-                    {isTop3 && <Medal size={16} className={index === 0 ? 'text-amber-500' : index === 1 ? 'text-slate-400' : 'text-amber-700'} />}
+              return (
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: Math.min(index * 0.03, 0.3) }}
+                  key={score.id || `${score.username}-${index}`}
+                  className={`flex items-center gap-3 p-3.5 bg-white border-4 border-slate-900 rounded-2xl shadow-[4px_4px_0px_0px_rgba(15,23,42,1)] ${isTop3 ? 'ring-2 ring-indigo-500/20' : ''}`}
+                >
+                  <div className={`w-9 h-9 rounded-xl border-2 border-slate-900 flex items-center justify-center font-black text-sm italic ${badgeBg} shadow-[2px_2px_0px_0px_rgba(15,23,42,1)]`}>
+                    #{rank}
                   </div>
-                  <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">
-                    {score.timestamp ? new Date(score.timestamp).toLocaleDateString('th-TH') : 'วันนี้'}
-                  </p>
-                </div>
 
-                <div className="text-right">
-                  <div className="text-indigo-600 font-black text-lg italic leading-none">{score.score}</div>
-                  <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest">PTS</div>
-                </div>
-              </motion.div>
-            );
-          })
+                  <div className="flex-1 truncate">
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-black text-slate-900 text-sm uppercase tracking-tight italic truncate">
+                        {score.username}
+                      </h3>
+                      {isTop3 && <Medal size={16} className={rank === 1 ? 'text-amber-500' : rank === 2 ? 'text-slate-400' : 'text-amber-700'} />}
+                    </div>
+                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">
+                      {score.timestamp ? new Date(score.timestamp).toLocaleDateString('th-TH') : 'วันนี้'}
+                    </p>
+                  </div>
+
+                  <div className="text-right">
+                    <div className="text-indigo-600 font-black text-lg italic leading-none">{score.score}</div>
+                    <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest">PTS</div>
+                  </div>
+                </motion.div>
+              );
+            });
+          })()
         )}
       </div>
     </div>

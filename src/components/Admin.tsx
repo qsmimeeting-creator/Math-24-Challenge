@@ -56,7 +56,7 @@ export default function Admin({ setView }: Props) {
 
   const handleLogin = (e: FormEvent) => {
     e.preventDefault();
-    if (passwordInput === '1234' || passwordInput === 'admin' || passwordInput === 'admin24') {
+    if (passwordInput === 'Chai2530') {
       setAuthenticated(true);
       setPassError(false);
     } else {
