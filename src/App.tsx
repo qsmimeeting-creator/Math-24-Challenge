@@ -14,9 +14,10 @@ import Game from './components/Game';
 import Leaderboard from './components/Leaderboard';
 import Multiplayer from './components/Multiplayer';
 import Admin from './components/Admin';
+import Guide from './components/Guide';
 import { motion, AnimatePresence } from 'motion/react';
 
-type View = 'menu' | 'game' | 'leaderboard' | 'multiplayer' | 'settings' | 'admin';
+type View = 'menu' | 'game' | 'leaderboard' | 'multiplayer' | 'settings' | 'admin' | 'guide';
 
 export default function App() {
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -124,6 +125,7 @@ export default function App() {
           {view === 'leaderboard' && <Leaderboard setView={setView} />}
           {view === 'multiplayer' && <Multiplayer setView={setView} profile={profile} />}
           {view === 'admin' && <Admin setView={setView} />}
+          {view === 'guide' && <Guide setView={setView} />}
         </motion.div>
       </AnimatePresence>
     </div>

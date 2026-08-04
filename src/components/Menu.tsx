@@ -5,7 +5,7 @@
 
 import { UserProfile } from '../types';
 import { motion } from 'motion/react';
-import { Play, Trophy, Users, LogOut, Settings, Hash, ShieldAlert } from 'lucide-react';
+import { Play, Trophy, Users, LogOut, Settings, Hash, ShieldAlert, BookOpen } from 'lucide-react';
 import { auth } from '../lib/firebase';
 import AppLogo from './AppLogo';
 
@@ -77,6 +77,13 @@ export default function Menu({ setView, profile, onLogout }: Props) {
           description="Practice Your Own Numbers"
           color="bg-white"
           onClick={() => setView('game')}
+        />
+        <MenuButton 
+          icon={<BookOpen />} 
+          title="HOW TO PLAY" 
+          description="Rules, Modes & Tips"
+          color="bg-amber-400"
+          onClick={() => setView('guide')}
         />
       </div>
 

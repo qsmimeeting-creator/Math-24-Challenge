@@ -9,7 +9,7 @@ import { doc, setDoc, getDoc, updateDoc, onSnapshot, collection, getDocs, query,
 import { UserProfile, Room, Player } from '../types';
 import { Math24Solver } from '../utils/math24';
 import { motion, AnimatePresence } from 'motion/react';
-import { ChevronLeft, Users, Play, Trophy, RefreshCw, CheckCircle, RotateCcw, Clock, Crown, Medal, Award, SkipForward } from 'lucide-react';
+import { ChevronLeft, Users, Play, Trophy, RefreshCw, CheckCircle, RotateCcw, Clock, Crown, Medal, Award, SkipForward, BookOpen } from 'lucide-react';
 
 interface Props {
   setView: (view: any) => void;
@@ -78,6 +78,16 @@ export default function Multiplayer({ setView, profile }: Props) {
     const unsubscribe = onSnapshot(roomRef, (snapshot) => {
       if (snapshot.exists()) {
         const data = snapshot.data() as Room;
+
+        // If user was removed from player list, handle as left
+        if (data.players && !data.players.some(p => p.uid === userId)) {
+          setStatus('lobby');
+          setCurrentRoomId(null);
+          setRoom(null);
+          setErrorMsg('คุณได้ออกจากห้องแล้ว');
+          return;
+        }
+
         setRoom(data);
 
         if (data.timeLimit) {
@@ -93,7 +103,7 @@ export default function Multiplayer({ setView, profile }: Props) {
     });
 
     return () => unsubscribe();
-  }, [currentRoomId]);
+  }, [currentRoomId, userId]);
 
   // Sync initial board cards when game starts
   useEffect(() => {
@@ -434,10 +444,36 @@ export default function Multiplayer({ setView, profile }: Props) {
     }, 1800);
   };
 
-  const leaveRoom = () => {
+  const leaveRoom = async () => {
+    const roomIdToLeave = currentRoomId;
     setStatus('lobby');
     setCurrentRoomId(null);
     setRoom(null);
+
+    if (roomIdToLeave && userId) {
+      try {
+        const roomRef = doc(db, 'rooms', roomIdToLeave);
+        const docSnap = await getDoc(roomRef);
+        if (docSnap.exists()) {
+          const roomData = docSnap.data() as Room;
+          const remainingPlayers = (roomData.players || []).filter(p => p.uid !== userId);
+          if (remainingPlayers.length === 0) {
+            await updateDoc(roomRef, {
+              players: [],
+              status: 'closed'
+            });
+          } else {
+            const newHostId = roomData.hostId === userId ? remainingPlayers[0].uid : roomData.hostId;
+            await updateDoc(roomRef, {
+              players: remainingPlayers,
+              hostId: newHostId
+            });
+          }
+        }
+      } catch (e) {
+        console.error('Error leaving room:', e);
+      }
+    }
   };
 
   const myPlayerState = room?.players.find(p => p.uid === userId);
@@ -445,20 +481,30 @@ export default function Multiplayer({ setView, profile }: Props) {
 
   return (
     <div className="flex-1 flex flex-col p-6">
-      <header className="flex items-center gap-4 mb-6 bg-white p-4 rounded-2xl border-4 border-slate-900 shadow-[4px_4px_0px_0px_rgba(15,23,42,1)]">
-        <button 
-          onClick={() => {
-            if (status === 'room') {
-              leaveRoom();
-            } else {
-              setView('menu');
-            }
-          }} 
-          className="p-2 bg-slate-100 rounded-xl text-slate-900 border-2 border-slate-900 shadow-[2px_2px_0px_0px_rgba(15,23,42,1)] active:shadow-none active:translate-x-[1px] active:translate-y-[1px]"
-        >
-          <ChevronLeft size={20} className="stroke-[3px]" />
-        </button>
-        <h1 className="text-2xl font-black text-slate-900 italic tracking-tighter uppercase">MULTIPLAYER</h1>
+      <header className="flex items-center justify-between mb-6 bg-white p-4 rounded-2xl border-4 border-slate-900 shadow-[4px_4px_0px_0px_rgba(15,23,42,1)]">
+        <div className="flex items-center gap-2">
+          <button 
+            onClick={() => {
+              if (status === 'room') {
+                leaveRoom();
+              } else {
+                setView('menu');
+              }
+            }} 
+            className="p-2 bg-slate-100 rounded-xl text-slate-900 border-2 border-slate-900 shadow-[2px_2px_0px_0px_rgba(15,23,42,1)] active:shadow-none active:translate-x-[1px] active:translate-y-[1px]"
+            title="กลับหน้าเมนู"
+          >
+            <ChevronLeft size={20} className="stroke-[3px]" />
+          </button>
+          <button 
+            onClick={() => setView('guide')} 
+            className="p-2 bg-amber-400 rounded-xl text-slate-900 border-2 border-slate-900 shadow-[2px_2px_0px_0px_rgba(15,23,42,1)] active:shadow-none active:translate-x-[1px] active:translate-y-[1px]"
+            title="คู่มือการเล่น"
+          >
+            <BookOpen size={20} className="stroke-[3px]" />
+          </button>
+        </div>
+        <h1 className="text-xl font-black text-slate-900 italic tracking-tighter uppercase">MULTIPLAYER</h1>
       </header>
 
       {errorMsg && (
@@ -801,6 +847,14 @@ export default function Multiplayer({ setView, profile }: Props) {
                       ⏳ รอผู้สร้างห้องกด "เริ่มเกมส์"
                     </div>
                   )}
+
+                  {/* Leave Room Button */}
+                  <button
+                    onClick={leaveRoom}
+                    className="w-full py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-700 font-black rounded-2xl border-2 border-slate-900 text-xs uppercase tracking-wider transition-colors italic"
+                  >
+                    🚪 ออกจากห้อง (LEAVE ROOM)
+                  </button>
                 </div>
               </div>
             ) : (

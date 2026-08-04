@@ -5,7 +5,7 @@
 
 import { useState, useEffect, FormEvent } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ChevronLeft, RotateCcw, Lightbulb, SkipForward, Clock, Trophy, Flame, Hash, CheckCircle } from 'lucide-react';
+import { ChevronLeft, RotateCcw, Lightbulb, SkipForward, Clock, Trophy, Flame, Hash, CheckCircle, BookOpen } from 'lucide-react';
 import { Math24Solver } from '../utils/math24';
 import { UserProfile } from '../types';
 import { db } from '../lib/firebase';
@@ -217,9 +217,14 @@ export default function Game({ setView, profile }: Props) {
   return (
     <div className="flex-1 flex flex-col p-6">
       <header className="flex items-center justify-between mb-6 bg-white p-4 rounded-2xl border-4 border-slate-900 shadow-[4px_4px_0px_0px_rgba(15,23,42,1)]">
-        <button onClick={() => setView('menu')} className="p-2 bg-slate-100 rounded-xl text-slate-900 border-2 border-slate-900 shadow-[2px_2px_0px_0px_rgba(15,23,42,1)] active:shadow-none active:translate-x-[1px] active:translate-y-[1px]">
-          <ChevronLeft size={20} className="stroke-[3px]" />
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={() => setView('menu')} className="p-2 bg-slate-100 rounded-xl text-slate-900 border-2 border-slate-900 shadow-[2px_2px_0px_0px_rgba(15,23,42,1)] active:shadow-none active:translate-x-[1px] active:translate-y-[1px]" title="กลับหน้าเมนู">
+            <ChevronLeft size={20} className="stroke-[3px]" />
+          </button>
+          <button onClick={() => setView('guide')} className="p-2 bg-amber-400 rounded-xl text-slate-900 border-2 border-slate-900 shadow-[2px_2px_0px_0px_rgba(15,23,42,1)] active:shadow-none active:translate-x-[1px] active:translate-y-[1px]" title="คู่มือการเล่น">
+            <BookOpen size={20} className="stroke-[3px]" />
+          </button>
+        </div>
         <div className="flex items-center gap-3">
           <button
             onClick={() => setTimerEnabled(!timerEnabled)}
