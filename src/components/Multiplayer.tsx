@@ -5,7 +5,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { db } from '../lib/firebase';
-import { doc, setDoc, getDoc, updateDoc, onSnapshot, collection, getDocs, query, limit } from 'firebase/firestore';
+import { doc, setDoc, getDoc, updateDoc, deleteDoc, onSnapshot, collection, getDocs, query, limit } from 'firebase/firestore';
 import { UserProfile, Room, Player } from '../types';
 import { Math24Solver } from '../utils/math24';
 import { motion, AnimatePresence } from 'motion/react';
@@ -47,21 +47,53 @@ export default function Multiplayer({ setView, profile }: Props) {
     ? (room.hostId ? room.hostId === userId : room.players?.[0]?.uid === userId) 
     : false;
 
-  // Fetch active rooms on lobby mount
+  // Realtime subscription for active rooms in lobby
   useEffect(() => {
     if (status !== 'lobby') return;
-    fetchPublicRooms();
+
+    const q = query(collection(db, 'rooms'), limit(30));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const roomsList: { id: string; count: number; hostName?: string; timeLimit?: number }[] = [];
+      snapshot.forEach(d => {
+        const data = d.data();
+        if (!data.players || data.players.length === 0 || data.status === 'closed') {
+          // Clean up empty or closed room document from Firestore
+          deleteDoc(d.ref).catch(() => {});
+        } else if (data.status === 'waiting' && Array.isArray(data.players) && data.players.length > 0) {
+          const host = data.players.find((p: any) => p.uid === data.hostId) || data.players[0];
+          roomsList.push({
+            id: d.id,
+            count: data.players.length,
+            hostName: host?.username || 'HOST',
+            timeLimit: data.timeLimit || 60
+          });
+        }
+      });
+      setActiveRooms(roomsList);
+    }, (e) => {
+      console.warn('Failed to subscribe active rooms:', e);
+    });
+
+    return () => unsubscribe();
   }, [status]);
 
   const fetchPublicRooms = async () => {
     try {
-      const q = query(collection(db, 'rooms'), limit(10));
+      const q = query(collection(db, 'rooms'), limit(30));
       const snapshot = await getDocs(q);
-      const roomsList: { id: string; count: number }[] = [];
+      const roomsList: { id: string; count: number; hostName?: string; timeLimit?: number }[] = [];
       snapshot.forEach(d => {
         const data = d.data();
-        if (data.status === 'waiting' && Array.isArray(data.players)) {
-          roomsList.push({ id: d.id, count: data.players.length });
+        if (!data.players || data.players.length === 0 || data.status === 'closed') {
+          deleteDoc(d.ref).catch(() => {});
+        } else if (data.status === 'waiting' && Array.isArray(data.players) && data.players.length > 0) {
+          const host = data.players.find((p: any) => p.uid === data.hostId) || data.players[0];
+          roomsList.push({
+            id: d.id,
+            count: data.players.length,
+            hostName: host?.username || 'HOST',
+            timeLimit: data.timeLimit || 60
+          });
         }
       });
       setActiveRooms(roomsList);
@@ -231,6 +263,12 @@ export default function Multiplayer({ setView, profile }: Props) {
       const meInRoom = players.find(p => p.uid === userId);
 
       if (!meInRoom) {
+        if (existingRoom.status !== 'waiting') {
+          setErrorMsg('ห้องนี้เริ่มเกมไปแล้ว ไม่สามารถเข้าร่วมได้');
+          setLoading(false);
+          return;
+        }
+
         const updatedPlayers: Player[] = [...players, {
           uid: userId,
           username,
@@ -458,10 +496,7 @@ export default function Multiplayer({ setView, profile }: Props) {
           const roomData = docSnap.data() as Room;
           const remainingPlayers = (roomData.players || []).filter(p => p.uid !== userId);
           if (remainingPlayers.length === 0) {
-            await updateDoc(roomRef, {
-              players: [],
-              status: 'closed'
-            });
+            await deleteDoc(roomRef);
           } else {
             const newHostId = roomData.hostId === userId ? remainingPlayers[0].uid : roomData.hostId;
             await updateDoc(roomRef, {
@@ -584,30 +619,64 @@ export default function Multiplayer({ setView, profile }: Props) {
             </div>
 
             {/* Active Public Rooms */}
-            {activeRooms.length > 0 && (
-              <div className="bg-white border-4 border-slate-900 p-4 rounded-3xl shadow-[6px_6px_0px_0px_rgba(15,23,42,1)]">
-                <div className="flex items-center justify-between mb-3">
-                  <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest italic">ACTIVE ROOMS</span>
-                  <button onClick={fetchPublicRooms} className="text-indigo-600">
-                    <RefreshCw size={14} className="stroke-[3px]" />
-                  </button>
+            <div className="bg-white border-4 border-slate-900 p-4 rounded-3xl shadow-[6px_6px_0px_0px_rgba(15,23,42,1)]">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                  <span className="text-xs font-black text-slate-900 uppercase tracking-wider italic">
+                    ห้องที่กำลังรอผู้เล่น ({activeRooms.length})
+                  </span>
                 </div>
-                <div className="space-y-2 max-h-32 overflow-y-auto pr-1">
+                <button 
+                  onClick={fetchPublicRooms} 
+                  className="p-1 hover:bg-slate-100 rounded-lg text-indigo-600 transition-colors"
+                  title="รีเฟรชรายชื่อห้อง"
+                >
+                  <RefreshCw size={15} className="stroke-[3px]" />
+                </button>
+              </div>
+
+              {activeRooms.length > 0 ? (
+                <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
                   {activeRooms.map(r => (
                     <div 
                       key={r.id} 
                       onClick={() => joinRoom(r.id)}
-                      className="flex items-center justify-between p-3 bg-slate-50 border-2 border-slate-900 rounded-xl hover:bg-yellow-100 cursor-pointer transition-colors"
+                      className="flex items-center justify-between p-3 bg-slate-50 border-2 border-slate-900 rounded-xl hover:bg-amber-100 cursor-pointer transition-all active:scale-[0.99] group shadow-[2px_2px_0px_0px_rgba(15,23,42,1)]"
                     >
-                      <span className="font-black text-slate-900 text-sm uppercase italic">{r.id}</span>
-                      <span className="text-[10px] bg-indigo-100 text-indigo-700 px-2.5 py-0.5 rounded-full font-black border border-indigo-900">
-                        {r.count} PLAYER{r.count > 1 ? 'S' : ''}
-                      </span>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-black text-indigo-600 text-sm uppercase italic tracking-wider">{r.id}</span>
+                          {r.timeLimit && (
+                            <span className="text-[9px] font-bold text-slate-600 bg-slate-200 px-1.5 py-0.5 rounded border border-slate-400">
+                              ⏱️ {r.timeLimit}s
+                            </span>
+                          )}
+                        </div>
+                        {r.hostName && (
+                          <div className="text-[10px] font-bold text-slate-500">
+                            สร้างโดย: {r.hostName}
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] bg-emerald-100 text-emerald-800 px-2.5 py-1 rounded-full font-black border border-slate-900 shadow-[1px_1px_0px_0px_rgba(15,23,42,1)]">
+                          {r.count} คนในห้อง
+                        </span>
+                        <span className="text-xs font-black text-slate-900 group-hover:translate-x-0.5 transition-transform">
+                          →
+                        </span>
+                      </div>
                     </div>
                   ))}
                 </div>
-              </div>
-            )}
+              ) : (
+                <div className="text-center py-4 bg-slate-50 rounded-2xl border-2 border-dashed border-slate-300">
+                  <p className="text-xs font-bold text-slate-500">ยังไม่มีห้องที่เปิดรออยู่ขณะนี้</p>
+                  <p className="text-[10px] font-bold text-slate-400 mt-0.5">กดปุ่ม "CREATE ROOM" ด้านบนเพื่อเปิดห้องใหม่ได้เลย!</p>
+                </div>
+              )}
+            </div>
           </motion.div>
         ) : (
           <motion.div
