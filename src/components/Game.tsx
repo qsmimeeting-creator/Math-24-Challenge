@@ -46,16 +46,19 @@ export default function Game({ setView, profile }: Props) {
   }, []);
 
   useEffect(() => {
-    if (timerEnabled && timeLeft > 0 && !isGameOver) {
+    if (timerEnabled && timeLeft > 0 && !isGameOver && !showSuccessModal && !showCustomModal) {
       const timer = setTimeout(() => setTimeLeft(timeLeft - 1), 1000);
       return () => clearTimeout(timer);
     } else if (timerEnabled && timeLeft === 0 && !isGameOver) {
       handleGameOver();
     }
-  }, [timeLeft, isGameOver, timerEnabled]);
+  }, [timeLeft, isGameOver, timerEnabled, showSuccessModal, showCustomModal]);
 
   const startNewPuzzle = () => {
     setIsGameOver(false);
+    if (timerEnabled) {
+      setTimeLeft(60);
+    }
     const { numbers, solutions } = Math24Solver.generateSolvable();
     setInitialNums(numbers);
     setSolution(solutions[0]);
@@ -72,6 +75,9 @@ export default function Game({ setView, profile }: Props) {
         setInitialNums(nums);
         setSolution(solutions[0]);
         resetBoard(nums);
+        if (timerEnabled) {
+          setTimeLeft(60);
+        }
         setShowCustomModal(false);
         setCustomInputVal('');
       } else {
@@ -150,9 +156,6 @@ export default function Game({ setView, profile }: Props) {
   const handleSuccess = async () => {
     setScore(prev => prev + 10);
     setStreak(prev => prev + 1);
-    if (timerEnabled) {
-      setTimeLeft(prev => prev + 15);
-    }
     setMessage('SOLVED! PERFECT');
     setShowSuccessModal(true);
   };
