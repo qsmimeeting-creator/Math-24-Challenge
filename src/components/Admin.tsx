@@ -105,8 +105,24 @@ export default function Admin({ setView }: Props) {
           });
         } catch (e) {}
 
-        list.sort((a, b) => (b.score || 0) - (a.score || 0));
-        setLbList(list);
+        // Deduplicate leaderboard list by player username, keeping only their highest score
+        const playerMap = new Map<string, any>();
+        list.forEach(item => {
+          const rawName = (item.username || 'PLAYER').trim();
+          const normKey = rawName.toUpperCase();
+          const existing = playerMap.get(normKey);
+          if (!existing) {
+            playerMap.set(normKey, { ...item, username: rawName });
+          } else {
+            if ((item.score || 0) > (existing.score || 0)) {
+              playerMap.set(normKey, { ...item, username: rawName });
+            }
+          }
+        });
+
+        const deduplicatedLb = Array.from(playerMap.values());
+        deduplicatedLb.sort((a, b) => (b.score || 0) - (a.score || 0));
+        setLbList(deduplicatedLb);
       } else if (activeTab === 'rooms') {
         const snap = await getDocs(collection(db, 'rooms'));
         const list: any[] = [];

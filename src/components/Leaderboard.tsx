@@ -58,21 +58,33 @@ export default function Leaderboard({ setView }: Props) {
       console.warn('Firestore leaderboard query failed:', e);
     }
 
-    // 3. Merge local & Firestore
-    const mergedMap = new Map<string, ScoreEntry>();
+    // 3. Merge local & Firestore and deduplicate by username (keeping highest score per player)
+    const playerBestMap = new Map<string, ScoreEntry>();
+
     [...fsScores, ...localList].forEach(item => {
-      const key = item.id || `${item.username}-${item.score}-${item.timestamp}`;
-      if (!mergedMap.has(key)) {
-        mergedMap.set(key, item);
+      const rawName = (item.username || 'PLAYER').trim();
+      const normKey = rawName.toUpperCase();
+
+      const existing = playerBestMap.get(normKey);
+      if (!existing) {
+        playerBestMap.set(normKey, { ...item, username: rawName });
+      } else {
+        if (item.score > existing.score) {
+          playerBestMap.set(normKey, { ...item, username: rawName });
+        } else if (item.score === existing.score) {
+          if ((item.timestamp || 0) > (existing.timestamp || 0)) {
+            playerBestMap.set(normKey, { ...item, username: rawName });
+          }
+        }
       }
     });
 
-    let combined = Array.from(mergedMap.values());
+    let combined = Array.from(playerBestMap.values());
 
     // 4. Sort descending by score
     combined.sort((a, b) => b.score - a.score);
 
-    setScores(combined.slice(0, 30));
+    setScores(combined.slice(0, 50));
     setLoading(false);
   };
 
