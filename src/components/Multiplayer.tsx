@@ -126,7 +126,8 @@ export default function Multiplayer({ setView, profile }: Props) {
           setSelectedTimeLimit(data.timeLimit);
         }
       } else {
-        setErrorMsg('Room was closed or does not exist.');
+        // Room no longer exists on server
+        setErrorMsg('ห้องถูกปิดไปแล้วหรือไม่มีอยู่จริง');
         setStatus('lobby');
         setCurrentRoomId(null);
       }
@@ -197,11 +198,14 @@ export default function Multiplayer({ setView, profile }: Props) {
   };
 
   const createRoom = async () => {
+    if (!roomIdInput.trim()) {
+      setErrorMsg('กรุณาพิมพ์ตั้งชื่อห้องก่อนสร้างห้อง');
+      return;
+    }
+
     setLoading(true);
     setErrorMsg(null);
-    const code = roomIdInput.trim() 
-      ? roomIdInput.trim().toUpperCase() 
-      : `M24-${Math.floor(1000 + Math.random() * 9000)}`;
+    const code = roomIdInput.trim().toUpperCase();
     const puzzle = Math24Solver.generateSolvable();
 
     const newRoom: Room = {
@@ -223,26 +227,29 @@ export default function Multiplayer({ setView, profile }: Props) {
       createdAt: Date.now()
     };
 
-    // Optimistically transition to room view immediately
-    setRoom(newRoom);
-    setCurrentRoomId(code);
-    setStatus('room');
-    setLoading(false);
-
-    // Save room in Firestore asynchronously and sync user profile to users collection
     try {
+      // 1. Write room to Firestore FIRST so onSnapshot finds it immediately
+      await setDoc(doc(db, 'rooms', code), newRoom);
+
+      // 2. Sync user profile asynchronously
       if (userId) {
-        await setDoc(doc(db, 'users', userId), {
+        setDoc(doc(db, 'users', userId), {
           id: userId,
           uid: userId,
           username,
           updatedAt: Date.now()
         }, { merge: true }).catch(() => {});
       }
-      await setDoc(doc(db, 'rooms', code), newRoom);
+
+      // 3. Set state to enter room & start realtime listener
+      setRoom(newRoom);
+      setCurrentRoomId(code);
+      setStatus('room');
     } catch (e: any) {
       console.error('Error creating room on Firestore:', e);
-      setErrorMsg('ไม่สามารถบันทึกห้องบนเซิร์ฟเวอร์ได้ (ลองตรวจสอบอินเทอร์เน็ต)');
+      setErrorMsg('ไม่สามารถสร้างห้องบนเซิร์ฟเวอร์ได้ (กรุณาตรวจสอบการเชื่อมต่อ)');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -636,7 +643,7 @@ export default function Multiplayer({ setView, profile }: Props) {
               <div className="relative">
                 <input
                   type="text"
-                  placeholder="ROOM CODE (E.G. MATH24)"
+                  placeholder="พิมพ์ตั้งชื่อห้อง (เช่น ROOM24)"
                   value={roomIdInput}
                   onChange={(e) => setRoomIdInput(e.target.value.toUpperCase())}
                   className="w-full bg-white border-4 border-slate-900 p-4 rounded-2xl text-slate-900 font-black placeholder:text-slate-300 focus:outline-none focus:border-indigo-600 transition-colors shadow-[6px_6px_0px_0px_rgba(15,23,42,1)] uppercase tracking-widest text-center text-lg"
@@ -646,15 +653,15 @@ export default function Multiplayer({ setView, profile }: Props) {
               <div className="grid grid-cols-2 gap-3">
                 <button
                   onClick={createRoom}
-                  disabled={loading}
-                  className="bg-indigo-600 text-white font-black py-4 px-4 rounded-2xl border-4 border-slate-900 shadow-[6px_6px_0px_0px_rgba(15,23,42,1)] active:shadow-none active:translate-x-[4px] active:translate-y-[4px] uppercase tracking-widest italic text-sm disabled:opacity-50"
+                  disabled={loading || !roomIdInput.trim()}
+                  className="bg-indigo-600 text-white font-black py-4 px-4 rounded-2xl border-4 border-slate-900 shadow-[6px_6px_0px_0px_rgba(15,23,42,1)] active:shadow-none active:translate-x-[4px] active:translate-y-[4px] uppercase tracking-widest italic text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   CREATE ROOM
                 </button>
                 <button
                   onClick={() => joinRoom()}
-                  disabled={loading}
-                  className="bg-amber-400 text-slate-900 font-black py-4 px-4 rounded-2xl border-4 border-slate-900 shadow-[6px_6px_0px_0px_rgba(15,23,42,1)] active:shadow-none active:translate-x-[4px] active:translate-y-[4px] uppercase tracking-widest italic text-sm disabled:opacity-50"
+                  disabled={loading || !roomIdInput.trim()}
+                  className="bg-amber-400 text-slate-900 font-black py-4 px-4 rounded-2xl border-4 border-slate-900 shadow-[6px_6px_0px_0px_rgba(15,23,42,1)] active:shadow-none active:translate-x-[4px] active:translate-y-[4px] uppercase tracking-widest italic text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   JOIN ROOM
                 </button>

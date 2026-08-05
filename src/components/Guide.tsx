@@ -102,7 +102,7 @@ export default function Guide({ setView }: Props) {
                 </li>
                 <li className="flex items-start gap-2 bg-slate-50 p-2.5 rounded-xl border-2 border-slate-900">
                   <span className="bg-slate-900 text-white w-5 h-5 rounded-full flex items-center justify-center font-black text-[10px] shrink-0 mt-0.5">3</span>
-                  <span><strong>ใช้เครื่องหมายพื้นฐานได้อิสระ:</strong> บวก (+), ลบ (-), คูณ (×), หาร (÷) และสามารถใช้วงเล็บจัดกลุ่มได้</span>
+                  <span><strong>ใช้เครื่องหมายพื้นฐาน:</strong> บวก (+), ลบ (-), คูณ (×), หาร (÷) โดยการหาร<strong>ต้องเป็นจำนวนเต็มที่หารลงตัวเท่านั้น (ห้ามใช้เศษส่วนหรือทศนิยม)</strong></span>
                 </li>
               </ul>
             </div>
@@ -124,8 +124,8 @@ export default function Guide({ setView }: Props) {
               </div>
               <div className="bg-emerald-100 p-3 rounded-xl border-2 border-slate-900 text-xs font-black text-slate-900 space-y-1">
                 <p className="text-emerald-800">วิธีคิดตัวอย่าง:</p>
-                <p className="text-sm italic">6 ÷ (1 - (3 ÷ 4)) = 24</p>
-                <p className="text-slate-600 font-bold text-[11px]">หรือ (1 + 3) × (6 - 4) ... โอ๊ะ คิดได้อีกหลายวิธี!</p>
+                <p className="text-sm italic">(1 + 3) × 6 = 24</p>
+                <p className="text-slate-600 font-bold text-[11px]">หรือ (6 - 4) × 3 × 4 = 24 (ใช้ได้หลายวิธี!)</p>
               </div>
             </div>
           </motion.div>
@@ -216,9 +216,9 @@ export default function Guide({ setView }: Props) {
                 </div>
 
                 <div className="bg-white p-3 rounded-xl border-2 border-slate-900">
-                  <p className="text-indigo-600 font-black text-sm mb-1">3. การหารเศษส่วนกรณีเลขยาก</p>
+                  <p className="text-indigo-600 font-black text-sm mb-1">3. การหารต้องลงตัวเสมอ</p>
                   <p className="text-slate-600">
-                    หากมีเลข 3, 3, 7, 7 ลองใช้สูตร <span className="bg-yellow-200 px-1 rounded text-slate-900 font-black">24 = 3 ÷ (1 - 3/7)</span> เพื่อสร้างตัวหารเศษส่วน!
+                    เนื่องจากเกมไม่อนุญาตให้ใช้เศษส่วน หากมีเลขคู่ เช่น 8 และ 2 สามารถหารกันลงตัวได้ <span className="bg-yellow-200 px-1 rounded text-slate-900 font-black">8 ÷ 2 = 4</span> แล้วนำ 4 ไปคูณกับ 6 เพื่อได้ 24!
                   </p>
                 </div>
               </div>
