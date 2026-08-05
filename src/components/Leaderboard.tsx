@@ -14,6 +14,18 @@ interface Props {
   setView: (view: any) => void;
 }
 
+const formatDateBE = (timestamp?: number) => {
+  if (!timestamp) return 'วันนี้';
+  const date = new Date(timestamp);
+  if (isNaN(date.getTime())) return 'วันนี้';
+
+  const day = String(date.getDate()).padStart(2, '0');
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const yearBE = date.getFullYear() + 543;
+
+  return `${day}/${month}/${yearBE}`;
+};
+
 export default function Leaderboard({ setView }: Props) {
   const [scores, setScores] = useState<ScoreEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -164,7 +176,7 @@ export default function Leaderboard({ setView }: Props) {
                       {isTop3 && <Medal size={16} className={rank === 1 ? 'text-amber-500' : rank === 2 ? 'text-slate-400' : 'text-amber-700'} />}
                     </div>
                     <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">
-                      {score.timestamp ? new Date(score.timestamp).toLocaleDateString('th-TH') : 'วันนี้'}
+                      {formatDateBE(score.timestamp)}
                     </p>
                   </div>
 
