@@ -40,8 +40,8 @@ export class Math24Solver {
         // Multiplication
         this.permute([...nextArr, { val: a.val * b.val, expr: `(${a.expr} * ${b.expr})` }], results);
 
-        // Division
-        if (Math.abs(b.val) > 1e-6) {
+        // Division (only allow exact integer division with no remainder / no fractions)
+        if (b.val !== 0 && Number.isInteger(a.val) && Number.isInteger(b.val) && a.val % b.val === 0) {
           this.permute([...nextArr, { val: a.val / b.val, expr: `(${a.expr} / ${b.expr})` }], results);
         }
       }
@@ -50,9 +50,9 @@ export class Math24Solver {
 
   static generateSolvable(difficulty: number = 1): { numbers: number[]; solutions: string[] } {
     const defaultSolvables = [
-      [1, 3, 4, 6], [2, 3, 4, 8], [3, 3, 8, 8], [1, 5, 5, 5], [4, 4, 10, 10],
-      [1, 2, 3, 4], [2, 3, 5, 7], [1, 4, 5, 6], [3, 4, 6, 8], [2, 4, 6, 8],
-      [1, 1, 5, 8], [2, 2, 8, 8], [3, 5, 7, 9], [4, 6, 8, 9], [1, 7, 8, 9]
+      [1, 2, 3, 4], [2, 3, 4, 6], [2, 2, 8, 8], [2, 4, 6, 8],
+      [3, 3, 6, 6], [4, 4, 5, 6], [1, 5, 6, 7], [2, 3, 6, 9],
+      [1, 4, 5, 6], [3, 4, 6, 8]
     ];
 
     for (let attempts = 0; attempts < 30; attempts++) {

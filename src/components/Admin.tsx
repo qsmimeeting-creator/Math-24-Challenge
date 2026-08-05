@@ -11,6 +11,7 @@ import {
   doc, 
   deleteDoc, 
   updateDoc, 
+  setDoc,
   writeBatch 
 } from 'firebase/firestore';
 import { motion } from 'motion/react';
@@ -74,53 +75,104 @@ export default function Admin({ setView }: Props) {
     setLoading(true);
     setStatusMsg(null);
     try {
-      if (activeTab === 'users') {
-        const snap = await getDocs(collection(db, 'users'));
-        const list: any[] = [];
-        snap.forEach(d => list.push({ id: d.id, ...d.data() }));
-        
-        // Also merge local
-        const localProf = localStorage.getItem('math24_user_profile');
-        if (localProf) {
-          try {
-            const p = JSON.parse(localProf);
-            if (!list.some(u => u.uid === p.uid || u.id === p.uid)) {
-              list.push({ id: p.uid, ...p, isLocalOnly: true });
-            }
-          } catch (e) {}
-        }
-        setUsersList(list);
-      } else if (activeTab === 'leaderboard') {
-        const snap = await getDocs(collection(db, 'leaderboard'));
-        const list: any[] = [];
-        snap.forEach(d => list.push({ id: d.id, ...d.data() }));
+      if (activeTab === 'users' || activeTab === 'leaderboard') {
+        // 1. Get users from Firestore
+        const usersSnap = await getDocs(collection(db, 'users'));
+        const firestoreUsers: any[] = [];
+        usersSnap.forEach(d => firestoreUsers.push({ id: d.id, ...d.data() }));
 
-        // Merge local storage leaderboard
+        // 2. Get local user profile
+        const localProfStr = localStorage.getItem('math24_user_profile');
+        let localProf: any = null;
+        if (localProfStr) {
+          try { localProf = JSON.parse(localProfStr); } catch (e) {}
+        }
+
+        // 3. Get leaderboard entries from Firestore
+        const lbSnap = await getDocs(collection(db, 'leaderboard'));
+        const firestoreLb: any[] = [];
+        lbSnap.forEach(d => firestoreLb.push({ id: d.id, ...d.data() }));
+
+        // 4. Get local leaderboard entries
+        let localLb: any[] = [];
         try {
-          const localLb = JSON.parse(localStorage.getItem('math24_leaderboard') || '[]');
-          localLb.forEach((item: any) => {
-            if (!list.some(l => l.id === item.id)) {
-              list.push({ ...item, isLocalOnly: true });
-            }
-          });
+          localLb = JSON.parse(localStorage.getItem('math24_leaderboard') || '[]');
         } catch (e) {}
 
+        const allLbItems = [...firestoreLb, ...localLb];
+
+        // Map users by normalized username and by UID
+        const userMap = new Map<string, any>();
+
+        firestoreUsers.forEach(u => {
+          const rawName = (u.username || '').trim();
+          if (rawName) {
+            userMap.set(rawName.toUpperCase(), { ...u, username: rawName });
+          }
+        });
+
+        if (localProf && localProf.username) {
+          const lName = localProf.username.trim();
+          const normKey = lName.toUpperCase();
+          if (!userMap.has(normKey)) {
+            userMap.set(normKey, { id: localProf.uid, ...localProf, username: lName, isLocalOnly: true });
+          }
+        }
+
+        // Auto-discover any players in leaderboard who are missing from users collection
+        let autoSyncedCount = 0;
+        for (const lbItem of allLbItems) {
+          const rawName = (lbItem.username || '').trim();
+          if (!rawName) continue;
+          const normKey = rawName.toUpperCase();
+
+          if (!userMap.has(normKey)) {
+            const uid = lbItem.userId || `user_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+            const newUserObj = {
+              id: uid,
+              uid: uid,
+              username: rawName,
+              bestScore: Number(lbItem.score) || 0,
+              createdAt: lbItem.timestamp || Date.now(),
+              autoSyncedFromLeaderboard: true
+            };
+
+            userMap.set(normKey, newUserObj);
+            autoSyncedCount++;
+
+            // Save to Firestore 'users' collection so they persist permanently
+            setDoc(doc(db, 'users', uid), newUserObj).catch(() => {});
+          } else {
+            const existing = userMap.get(normKey);
+            if ((lbItem.score || 0) > (existing.bestScore || 0)) {
+              existing.bestScore = lbItem.score;
+            }
+          }
+        }
+
+        const fullUsersList = Array.from(userMap.values());
+        setUsersList(fullUsersList);
+
+        if (autoSyncedCount > 0) {
+          setStatusMsg(`✨ ซิงค์และสร้างรายชื่อผู้เล่นใหม่ ${autoSyncedCount} คนจากตารางคะแนนเข้าสู่ระบบแล้ว`);
+        }
+
         // Deduplicate leaderboard list by player username, keeping only their highest score
-        const playerMap = new Map<string, any>();
-        list.forEach(item => {
+        const playerBestMap = new Map<string, any>();
+        allLbItems.forEach(item => {
           const rawName = (item.username || 'PLAYER').trim();
           const normKey = rawName.toUpperCase();
-          const existing = playerMap.get(normKey);
+          const existing = playerBestMap.get(normKey);
           if (!existing) {
-            playerMap.set(normKey, { ...item, username: rawName });
+            playerBestMap.set(normKey, { ...item, username: rawName });
           } else {
             if ((item.score || 0) > (existing.score || 0)) {
-              playerMap.set(normKey, { ...item, username: rawName });
+              playerBestMap.set(normKey, { ...item, username: rawName });
             }
           }
         });
 
-        const deduplicatedLb = Array.from(playerMap.values());
+        const deduplicatedLb = Array.from(playerBestMap.values());
         deduplicatedLb.sort((a, b) => (b.score || 0) - (a.score || 0));
         setLbList(deduplicatedLb);
       } else if (activeTab === 'rooms') {
@@ -131,30 +183,72 @@ export default function Admin({ setView }: Props) {
       }
     } catch (e) {
       console.error('Error loading admin data:', e);
-      setStatusMsg('โหลดข้อมูลขัดข้อง (ใช้อินเทอร์เน็ตหรือ Firestore rules)');
+      setStatusMsg('โหลดข้อมูลขัดข้อง (โปรดตรวจสอบการเชื่อมต่อ)');
     } finally {
       setLoading(false);
     }
   };
 
   // User CRUD
-  const handleDeleteUser = async (id: string) => {
-    if (!confirm('ยืนยันลบผู้เล่นนี้?')) return;
-    try {
-      await deleteDoc(doc(db, 'users', id));
-    } catch (e) {}
-    
-    // Also remove from local
-    const localProf = localStorage.getItem('math24_user_profile');
-    if (localProf) {
-      try {
-        const p = JSON.parse(localProf);
-        if (p.uid === id) localStorage.removeItem('math24_user_profile');
-      } catch (e) {}
-    }
+  const handleDeleteUser = async (userObj: any) => {
+    const username = typeof userObj === 'string' ? userObj : (userObj.username || 'ผู้เล่นนี้');
+    const targetUid = typeof userObj === 'object' ? (userObj.uid || userObj.id) : userObj;
+    const normName = typeof userObj === 'object' && userObj.username ? userObj.username.trim().toUpperCase() : '';
 
-    setUsersList(prev => prev.filter(u => u.id !== id && u.uid !== id));
-    setStatusMsg('ลบผู้เล่นเรียบร้อย');
+    if (!confirm(`ยืนยันลบผู้เล่น "${username}"? (คะแนนในตารางของชื่อนี้จะถูกลบไปด้วย)`)) return;
+    
+    setLoading(true);
+    try {
+      // 1. Delete user from Firestore
+      if (targetUid) {
+        await deleteDoc(doc(db, 'users', targetUid)).catch(() => {});
+      }
+
+      // 2. Delete all leaderboard records for this user or username
+      const lbSnap = await getDocs(collection(db, 'leaderboard'));
+      const batch = writeBatch(db);
+      let deletedLbDocs = 0;
+      lbSnap.forEach(d => {
+        const data = d.data();
+        const dName = (data.username || '').trim().toUpperCase();
+        if ((normName && dName === normName) || (data.userId && data.userId === targetUid)) {
+          batch.delete(d.ref);
+          deletedLbDocs++;
+        }
+      });
+
+      if (deletedLbDocs > 0) {
+        await batch.commit().catch(() => {});
+      }
+
+      // 3. Clean up local storage if matching
+      const localProfStr = localStorage.getItem('math24_user_profile');
+      if (localProfStr) {
+        try {
+          const p = JSON.parse(localProfStr);
+          if (p.uid === targetUid || (normName && p.username?.trim().toUpperCase() === normName)) {
+            localStorage.removeItem('math24_user_profile');
+          }
+        } catch (e) {}
+      }
+
+      try {
+        const localLb = JSON.parse(localStorage.getItem('math24_leaderboard') || '[]');
+        const filteredLb = localLb.filter((item: any) => 
+          item.userId !== targetUid && (!normName || item.username?.trim().toUpperCase() !== normName)
+        );
+        localStorage.setItem('math24_leaderboard', JSON.stringify(filteredLb));
+      } catch (e) {}
+
+      setUsersList(prev => prev.filter(u => u.id !== targetUid && u.uid !== targetUid && (!normName || u.username?.trim().toUpperCase() !== normName)));
+      setLbList(prev => prev.filter(l => l.userId !== targetUid && (!normName || l.username?.trim().toUpperCase() !== normName)));
+      setStatusMsg(`ลบผู้เล่น "${username}" และคะแนนสะสมเรียบร้อยแล้ว`);
+    } catch (e) {
+      console.error('Delete user failed:', e);
+      setStatusMsg('ลบผู้เล่นไม่สำเร็จ');
+    } finally {
+      setLoading(false);
+    }
   };
 
   // Leaderboard CRUD
@@ -431,7 +525,7 @@ export default function Admin({ setView }: Props) {
                         <Edit2 size={14} />
                       </button>
                       <button
-                        onClick={() => handleDeleteUser(user.id)}
+                        onClick={() => handleDeleteUser(user)}
                         className="p-2 bg-rose-500 text-white border border-slate-900 rounded-lg text-xs font-black"
                       >
                         <Trash2 size={14} />

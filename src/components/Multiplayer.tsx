@@ -229,8 +229,16 @@ export default function Multiplayer({ setView, profile }: Props) {
     setStatus('room');
     setLoading(false);
 
-    // Save room in Firestore asynchronously
+    // Save room in Firestore asynchronously and sync user profile to users collection
     try {
+      if (userId) {
+        await setDoc(doc(db, 'users', userId), {
+          id: userId,
+          uid: userId,
+          username,
+          updatedAt: Date.now()
+        }, { merge: true }).catch(() => {});
+      }
       await setDoc(doc(db, 'rooms', code), newRoom);
     } catch (e: any) {
       console.error('Error creating room on Firestore:', e);
@@ -277,6 +285,15 @@ export default function Multiplayer({ setView, profile }: Props) {
           isFinished: false
         }];
         await updateDoc(roomRef, { players: updatedPlayers });
+      }
+
+      if (userId) {
+        await setDoc(doc(db, 'users', userId), {
+          id: userId,
+          uid: userId,
+          username,
+          updatedAt: Date.now()
+        }, { merge: true }).catch(() => {});
       }
 
       setRoom(existingRoom);
@@ -397,7 +414,18 @@ export default function Multiplayer({ setView, profile }: Props) {
     if (op === '-') res = c1.val - c2.val;
     if (op === '*') res = c1.val * c2.val;
     if (op === '/') {
-      if (c2.val === 0) return;
+      if (c2.val === 0) {
+        setGameMessage('ห้ามหารด้วยศูนย์');
+        setSelectedId(null);
+        setSelectedOp(null);
+        return;
+      }
+      if (c1.val % c2.val !== 0) {
+        setGameMessage('หารไม่ลงตัว! (ห้ามใช้เศษส่วน)');
+        setSelectedId(null);
+        setSelectedOp(null);
+        return;
+      }
       res = c1.val / c2.val;
     }
 

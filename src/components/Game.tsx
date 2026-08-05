@@ -9,7 +9,7 @@ import { ChevronLeft, RotateCcw, Lightbulb, SkipForward, Clock, Trophy, Flame, H
 import { Math24Solver } from '../utils/math24';
 import { UserProfile } from '../types';
 import { db } from '../lib/firebase';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, doc, setDoc } from 'firebase/firestore';
 
 interface Props {
   setView: (view: any) => void;
@@ -124,7 +124,18 @@ export default function Game({ setView, profile }: Props) {
     if (op === '-') res = c1.val - c2.val;
     if (op === '*') res = c1.val * c2.val;
     if (op === '/') {
-      if (c2.val === 0) return;
+      if (c2.val === 0) {
+        setMessage('ห้ามหารด้วยศูนย์');
+        setSelectedId(null);
+        setSelectedOp(null);
+        return;
+      }
+      if (c1.val % c2.val !== 0) {
+        setMessage('หารไม่ลงตัว! (ห้ามใช้เศษส่วน)');
+        setSelectedId(null);
+        setSelectedOp(null);
+        return;
+      }
       res = c1.val / c2.val;
     }
 
@@ -189,6 +200,17 @@ export default function Game({ setView, profile }: Props) {
     // Also attempt Firestore save
     if (profile && finalScore > 0) {
       try {
+        // Guarantee user profile is saved to users collection
+        if (currentUid && currentUid !== 'guest') {
+          await setDoc(doc(db, 'users', currentUid), {
+            id: currentUid,
+            uid: currentUid,
+            username: currentUsername,
+            bestScore: Math.max(profile.bestScore || 0, finalScore),
+            updatedAt: Date.now()
+          }, { merge: true }).catch(() => {});
+        }
+
         await addDoc(collection(db, 'leaderboard'), {
           userId: currentUid,
           username: currentUsername,
